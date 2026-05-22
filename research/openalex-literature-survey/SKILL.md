@@ -259,5 +259,4 @@ Before relying on full-text retrieval, verify each publisher's policy:
 ## Related Skills
 - `jstage-jslis-daily-summary` — Japanese LIS papers from J-STAGE/CiNii (complementary coverage for East Asian LIS literature)
 - `arxiv` — CS/DL/IR preprints on arXiv (for computer science-adjacent surveys)
-- `web-fact-check` — quick single-fact lookups via Wikipedia API
 - `blogwatcher` — RSS feed monitoring for blog/feed-based literature alerts

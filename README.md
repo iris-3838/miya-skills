@@ -19,9 +19,7 @@ skills/
     ├── jstage-jslis-daily-summary/  # J-STAGE + CiNii デイリーサマリー
     ├── lis-word-dict/       # 図書館情報学辞典（RAG + ナレッジグラフ）
     ├── llm-kb-wiki/         # Karpathy 式 LLM Wiki 知識ベース
-    ├── openalex-literature-survey/  # OpenAlex 学術雑誌サーベイ
-    ├── web-fact-check/      # Web ファクトチェック
-    └── zotero-pdf-translation/  # Zotero 翻訳連携
+    └── openalex-literature-survey/  # OpenAlex 学術雑誌サーベイ
 ```
 
 各スキルは `SKILL.md`（手順書）と `scripts/`（スクリプト）、`references/`（リファレンス）で構成されています。
@@ -44,9 +42,7 @@ skills/
 | **openalex-literature-survey** | OpenAlex API による学術雑誌サーベイ — メタデータ収集・トピック分布・OA状況・出版元TDMポリシー分析 |
 | **jstage-jslis-daily-summary** | J-STAGE + CiNii の LIS 論文デイリーサマリー（日本語） — cron 定期実行対応 |
 | **lis-word-dict** | 図書館情報学辞典 — FAISS/BM25 ハイブリッドRAG検索＋ナレッジグラフ展開 |
-| **zotero-pdf-translation** | Zotero プラグイン連携 — LLM翻訳・対訳PDF表示（WSL2 カスタムモデル対応） |
 | **llm-kb-wiki** | Karpathy 式 LLM Wiki — 相互リンク型マークダウン知識ベース（Human Zone / Agent Zone 設計） |
-| **web-fact-check** | Web ファクトチェック — Wikipedia API・多ソース検証・クイックリファレンス lookup |
 
 ## プライバシー
 
