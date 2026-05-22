@@ -13,8 +13,7 @@ skills/
 ├── productivity/            # 生産性向上・家計管理
 │   ├── pomo/                # ポモドーロタイマー
 │   ├── sp/                  # super-productivity のエイリアス
-│   ├── super-productivity/  # SP REST API によるタスク管理
-│   ├── superproductivity/   # SP 週次サマリー・進捗管理
+│   ├── super-productivity/  # SP REST API によるタスク管理・週次サマリー・進捗管理
 │   └── zaim-household-finance/  # Zaim API 家計簿管理
 └── research/                # 学術研究・文献調査
     ├── jstage-jslis-daily-summary/  # J-STAGE + CiNii デイリーサマリー
@@ -34,8 +33,7 @@ skills/
 | スキル | 説明 |
 |--------|------|
 | **zaim-household-finance** | Zaim API による家計簿管理 — PayPay CSV インポート・重複検出・取引 CRUD・サブスクリプション検出 |
-| **super-productivity** | Super Productivity ローカル REST API によるタスク管理 — CRUD・プロジェクト管理・タイマー制御 |
-| **superproductivity** | Super Productivity の週次サマリー・進捗管理 — execute_code ベースの高効率実装 |
+| **super-productivity** | Super Productivity ローカル REST API によるタスク管理 — CRUD・プロジェクト管理・タイマー制御・週次サマリー・進捗管理 |
 | **sp** | super-productivity のエイリアス（一発タスク作成・ステータス確認） |
 | **pomo** | ポモドーロタイマー — `/pomo start` `/pomo status` `/pomo cancel`（SP 連携） |
 

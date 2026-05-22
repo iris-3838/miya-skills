@@ -313,6 +313,49 @@ curl -s -X POST http://localhost:3876/task-control/current \
 curl -s -X POST http://localhost:3876/task-control/stop | jq .
 ```
 
+## 週次タスクサマリー Workflow
+
+ユーザーが「今週のタスクまとめ」「週次サマリー」「進捗まとめ」などを求めた場合は、SP APIから `tasks`, `projects`, `tags` を取得し、プロジェクト別・タグ別・期限別に集計する。
+
+### 取得・集計の基本
+
+```python
+from hermes_tools import terminal
+import json, datetime
+
+SP = "http://localhost:3876"
+health = json.loads(terminal(f"curl -s {SP}/health")['output'])
+assert health.get('ok')
+
+tasks = json.loads(terminal(f"curl -s '{SP}/tasks?includeDone=false'")['output'])['data']
+projects = {p['id']: p['title'] for p in json.loads(terminal(f"curl -s {SP}/projects")['output'])['data']}
+tags = {t['id']: t['title'] for t in json.loads(terminal(f"curl -s {SP}/tags")['output'])['data']}
+```
+
+### 出力形式の例
+
+```text
+📋 今週のタスクまとめ（YYYY/MM/DD）
+
+📁 ProjectName (N件)
+  ☐ 🚨 Task title（締切: YYYY-MM-DD）
+  ☐ 🔥 Important task
+
+📊 集計
+  アクティブタスク: N件
+  🔥 重要: N件 / 🚨 緊急: N件 / 🔄 進行中: N件
+  ⚠️ 期限超過: N件
+  📅 今週の締切: N件
+```
+
+### タグの読み替え
+
+- `EM_IMPORTANT` → 🔥 important
+- `EM_URGENT` → 🚨 urgent
+- `KANBAN_IN_PROGRESS` → 🔄 in-progress
+- `TODAY` → 📅 today
+- その他のタグIDは `GET /tags` で表示名を解決する
+
 ## レスポンスのTaskオブジェクト構造
 
 ```typescript
