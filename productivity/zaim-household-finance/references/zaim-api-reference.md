@@ -42,10 +42,10 @@ GET /v2/home/user/verify
 With OAuth 1.0 auth header using all 4 tokens. Returns user name/email on success.
 
 ### Interactive Setup Script
-A ready-to-use script exists at `/workspace/zaim_token_setup.py`. Run it, input Consumer Key/Secret, and it walks through the full OAuth flow interactively:
+A ready-to-use script exists at `/workspace/scripts/zaim/zaim_token_setup.py`. Run it, input Consumer Key/Secret, and it walks through the full OAuth flow interactively:
 
 ```bash
-python3 /workspace/zaim_token_setup.py
+python3 /workspace/scripts/zaim/zaim_token_setup.py
 ```
 
 ### Python Implementation

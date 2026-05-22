@@ -62,13 +62,13 @@ Base URL: `https://api.zaim.net/v2`
 
 **Python library**: Use `pip install zaim requests_oauthlib --break-system-packages` (user-site install, since root access unavailable). Also supports `ExtendedApi` with client-side search filtering.
 
-**OAuth Token Setup Script**: `/workspace/zaim_token_setup.py` — interactive script that walks through the OAuth 1.0a flow (request token → user authorization → access token). Run with `python3 /workspace/zaim_token_setup.py` and enter Consumer Key/Secret when prompted.
+**OAuth Token Setup Script**: `/workspace/scripts/zaim/zaim_token_setup.py` — interactive script that walks through the OAuth 1.0a flow (request token → user authorization → access token). Run with `python3 /workspace/scripts/zaim/zaim_token_setup.py` and enter Consumer Key/Secret when prompted.
 
 **Note**: The official API docs at dev.zaim.net require login — the overview page redirects to a login form. Publicly accessible: terms of service at `/portal/tos`. No other doc pages are public.
 
 ## Automatic Category Classification
 
-A store-name-based classifier (`/workspace/categorize_and_subs.py`) automatically assigns Zaim category/genre to uncategorized transactions. Supports 50+ Japanese stores/chains with category rules mapped to Zaim's official category IDs.
+A store-name-based classifier (`/workspace/scripts/zaim/categorize_and_subs.py`) automatically assigns Zaim category/genre to uncategorized transactions. Supports 50+ Japanese stores/chains with category rules mapped to Zaim's official category IDs.
 
 ### Store Categories Supported
 
@@ -100,14 +100,14 @@ Rules are evaluated by keyword length (longest first) to prevent short keyword f
 ```bash
 # Dry run (preview only)
 source /workspace/.zaim_env
-python3 /workspace/categorize_and_subs.py --dry-run
+python3 /workspace/scripts/zaim/categorize_and_subs.py --dry-run
 
 # Full run (updates local DB + Zaim API)
-python3 /workspace/categorize_and_subs.py
+python3 /workspace/scripts/zaim/categorize_and_subs.py
 
 # Subscription detection only
 source /workspace/.zaim_env
-python3 /workspace/categorize_and_subs.py --subscriptions-only
+python3 /workspace/scripts/zaim/categorize_and_subs.py --subscriptions-only
 ```
 
 Workflow:
@@ -143,15 +143,15 @@ _Actual amounts and services will vary. Run the subscription detection script on
 
 ### Recovery
 
-If a previous partial-PUT batch zeroed your transaction amounts, use the recovery script:
+If a previous partial-PUT batch zeroed your transaction amounts, use the recovery script at `scripts/recover_amount.py` (skill directory):
 
 ```bash
-source /workspace/.zaim_env
-python3 /workspace/recover_zaim_amounts.py --dry-run  # preview
-python3 /workspace/recover_zaim_amounts.py             # fix
-```
+SKILL_SCRIPTS="/workspace/skills/productivity/zaim-household-finance/scripts"
 
-See `scripts/recover_amount.py` for details.
+source /workspace/.zaim_env
+python3 "$SKILL_SCRIPTS/recover_amount.py" --dry-run  # preview
+python3 "$SKILL_SCRIPTS/recover_amount.py"             # fix
+```
 
 ### Subscription Detection
 
@@ -166,8 +166,10 @@ Analyzes ALL transaction history to identify recurring subscriptions across ever
 ### Subscription Detection Script
 
 ```bash
+SKILL_SCRIPTS="/workspace/skills/productivity/zaim-household-finance/scripts"
+
 source /workspace/.zaim_env
-python3 /workspace/find_all_subscriptions.py
+python3 "$SKILL_SCRIPTS/find_all_subscriptions.py"
 ```
 
 Outputs:
@@ -183,7 +185,7 @@ The script `zaim.py` syncs all transaction history to a local SQLite cache at `~
 
 ```bash
 source /workspace/.zaim_env
-python3 /workspace/zaim.py sync
+python3 /workspace/scripts/zaim/zaim.py sync
 ```
 
 Schema (`transactions` table — via `sqlite3 ~/.zaim_cache/zaim.db`):
@@ -226,7 +228,7 @@ These are handled by the card statement import separately.
 ### Workflow
 ```bash
 # Step 1: Filter out card transactions from PayPay CSV
-python3 ~/workspace/filter_paypay_csv.py PayPay.csv -o PayPay_zaim.csv
+python3 ~/workspace/scripts/zaim/filter_paypay_csv.py PayPay.csv -o PayPay_zaim.csv
 
 # Step 2: Import filtered CSV to Zaim via API
 # (see references/paypay-csv-import.md for full workflow)
@@ -342,21 +344,25 @@ The script connects to the local SQLite cache (`~/.zaim_cache/zaim.db`), finds t
 
 ### Usage
 
+The script lives in this skill's `scripts/` directory:
+
 ```bash
+SKILL_SCRIPTS="/workspace/skills/productivity/zaim-household-finance/scripts"
+
 # Step 0: Ensure local DB is up-to-date
-source /workspace/.zaim_env && python3 /workspace/zaim.py sync
+source /workspace/.zaim_env && python3 /workspace/scripts/zaim/zaim.py sync
 
 # Step 1: Preview duplicates
-python3 /workspace/delete_duplicates.py --dry-run
+python3 "$SKILL_SCRIPTS/delete_duplicates.py" --dry-run
 
 # Step 2: Delete (with confirmation summary)
-python3 /workspace/delete_duplicates.py
+python3 "$SKILL_SCRIPTS/delete_duplicates.py"
 
 # Filters:
-python3 /workspace/delete_duplicates.py --min-amount 500          # only ¥500+
-python3 /workspace/delete_duplicates.py --only-store "カスミ"     # only specific store
-python3 /workspace/delete_duplicates.py --max-delete 50           # stop after 50 deletes
-python3 /workspace/delete_duplicates.py --keep-older               # delete lower ID instead
+python3 "$SKILL_SCRIPTS/delete_duplicates.py" --min-amount 500          # only ¥500+
+python3 "$SKILL_SCRIPTS/delete_duplicates.py" --only-store "カスミ"     # only specific store
+python3 "$SKILL_SCRIPTS/delete_duplicates.py" --max-delete 50           # stop after 50 deletes
+python3 "$SKILL_SCRIPTS/delete_duplicates.py" --keep-older               # delete lower ID instead
 ```
 
 ### Real-world Example
@@ -372,14 +378,16 @@ When investigating duplicate transactions at scale:
 ### Verification After Deletion
 
 ```bash
+SKILL_SCRIPTS="/workspace/skills/productivity/zaim-household-finance/scripts"
+
 # Re-sync local DB
-source /workspace/.zaim_env && python3 /workspace/zaim.py sync
+source /workspace/.zaim_env && python3 /workspace/scripts/zaim/zaim.py sync
 
 # Verify duplicate count dropped
-python3 /workspace/delete_duplicates.py --dry-run
+python3 "$SKILL_SCRIPTS/delete_duplicates.py" --dry-run
 
 # Also re-run subscription detection to see clean counts
-python3 /workspace/find_all_subscriptions.py
+python3 "$SKILL_SCRIPTS/find_all_subscriptions.py"
 ```
 
 ### Duplicate Detection Heuristics

@@ -8,8 +8,8 @@ was double-imported alongside the PayPayカード statement.
 
 Usage:
     source /workspace/.zaim_env
-    python3 /workspace/delete_duplicates.py --dry-run    # preview only
-    python3 /workspace/delete_duplicates.py               # delete duplicates
+    python3 /workspace/skills/productivity/zaim-household-finance/scripts/delete_duplicates.py --dry-run    # preview only
+    python3 /workspace/skills/productivity/zaim-household-finance/scripts/delete_duplicates.py               # delete duplicates
 
 Options:
     --dry-run           Preview only (no API calls)
@@ -258,6 +258,6 @@ print(f"\n  DB内取引数: {total_in_db}件 → {remaining}件（{success}件�
 
 # ── Refresh local cache ─────────────────────────────────────────────
 print("\n  💡 ローカルDB（~/.zaim_cache/zaim.db）を更新するには:")
-print("     source /workspace/.zaim_env && python3 /workspace/zaim.py sync")
+print("     source /workspace/.zaim_env && python3 /workspace/scripts/zaim/zaim.py sync")
 
 conn.close()
