@@ -8,6 +8,9 @@ trigger: |
   User wants periodic collection of new papers from specific venues.
   User asks about literature trends in a specific field.
   User name-drops a specific academic journal or conference series as a potential publication target.
+  User says "バックナンバー" or "back-issue" or "chronological survey" regarding journals.
+  User says "全件" or "all papers" or "全部内容まで見て" — wants exhaustive coverage, not keywords.
+  User says "文献に忠実な記述" or "faithful description" — output preference signal.
 ---
 
 # OpenAlex Literature Survey
@@ -104,15 +107,19 @@ This returns full article titles, authors, DOIs, and abstracts in the HTML (no J
 - **College & Research Libraries** (ACRL) — Diamond OA, no APC
 - **Library Trends** (Project Muse) — 58.8% OA, past issues freely available
 
-### 6. Analyze themes qualitatively
+### 6. Present papers neutrally
 
-After collecting papers, analyze for:
-- **Theoretical vs empirical** ratio — skim abstracts for methodology keywords
-- **Emerging topics** — novel term clusters not seen in prior runs
-- **AI/LLM penetration** — count papers mentioning machine learning, LLM, transformer, etc.
-- **Research methodology distribution** — classify by method: questionnaire survey, bibliometric analysis, interview, experiment, secondary data analysis, literature review, historical analysis
-- **Relevance to your field** — e.g. Floridi's philosophy of information, Hjørland's domain analysis
-- **Special issues** — check if Library Trends-style thematic issues are running
+After collecting papers, present them with **faithful, literal description** based on their abstracts. Do NOT:
+- Categorize papers into themes or compute percentages
+- Interpret or evaluate papers ("notable", "breakthrough")
+- Connect papers to each other or to broader field trends
+- Write qualitative trend analysis
+
+Instead, for each paper state: what it investigates, what method it uses, and what it finds — as written in the abstract. Neutral, paper-by-paper, letting the content speak for itself.
+
+Some users may prefer thematic analysis — ask if unsure. But the default should be neutral description.
+
+For quantitative summary, a simple table of papers-per-journal is sufficient:
 
 ## 7. Full-Text Access & Publisher Policy Compliance
 
@@ -211,9 +218,123 @@ Key patterns for the script:
 - Handle `counts_by_year` from source endpoint to compute per-year OA ratios
 - Save JSON alongside markdown for downstream analysis
 
+**For back-issue/chronic surveys** (year-by-year, one journal per run), use the companion script at `/opt/data/scripts/collect_lis_backissues.py`. It supports `--all-papers` mode (no keyword filter), single-journal selection, and automatic llm-kb saves. See `references/backnumber-survey-pattern.md` for full workflow.
+
 **Cron job architecture options:**
 - **(a) Script-only (`no_agent=True`):** Fetches + saves data verbatim. Zero LLM cost. Deliver to the user as a file notification.
 - **(b) LLM-driven (`no_agent=False`, default):** Script runs first (terminal), then the agent analyzes the output qualitatively and writes a narrative summary. Higher value but costs tokens. Use when the user asked for "定性的・定量的両面".
+
+## Pattern: Chronological Back-Issue Survey (Journal-Per-Day)
+
+For systematically surveying a journal's **entire archive** year-by-year. Each run covers **one journal × one year**. With 5 journals assigned across Tue–Sat, all advance by 1 year per week in parallel.
+
+**User preference (output style):** When presenting results, provide **faithful, literal description** of each paper based on its abstract. Do NOT:
+- Force-fit papers into predefined theme categories (情報概念, 情報哲学, AI 等)
+- Write thematic interpretations or emerging-topic analyses
+- Label papers as "注目すべき" or assign qualitative judgments
+- Add speculative connections between papers
+
+Instead, for each paper state: what it investigates, its method, and its findings — as written in the abstract. Neutral, paper-by-paper.
+
+### When to use
+
+- User asks to "survey back-issues" (バックナンバー) of journals
+- User says "時期でフィルタして、できるだけ全部内容まで見て" — filter by time period, read ALL content
+- User says "クエリというよりは" — don't keyword-query; browse chronologically
+- User says "文献に忠実な記述を心がけて" — faithful/literal description
+- User emphasizes reading ALL abstracts ("論文全件のアブストに目を通してほしい")
+
+### Architecture
+
+Each run = **one journal × one year**. No keyword filter — fetch ALL papers for that journal+year.
+
+**State file** (`survey_state.json`):
+```json
+{
+  "version": 2,
+  "day_assignment": {
+    "tuesday": "jdoc",
+    "wednesday": "jasist",
+    "thursday": "ko",
+    "friday": "library_trends",
+    "saturday": "asist_proc"
+  },
+  "year_end": 2026,
+  "journals": {
+    "jdoc": {"current_year": 2000, "status": "active"},
+    "jasist": {"current_year": 2000, "status": "active"},
+    "ko": {"current_year": 2000, "status": "active"},
+    "library_trends": {"current_year": 2000, "status": "active"},
+    "asist_proc": {"current_year": 2000, "status": "active"}
+  }
+}
+```
+
+**Cron schedule:** 5 separate jobs (one per journal), Tue–Sat at 00:00 UTC (09:00 JST):
+```
+Tue 0 0 * * 2 → jdoc
+Wed 0 0 * * 3 → jasist
+Thu 0 0 * * 4 → ko
+Fri 0 0 * * 5 → library_trends
+Sat 0 0 * * 6 → asist_proc
+```
+
+Each job is LLM-driven (not `no_agent`) with `llm-kb-wiki` skill loaded. The agent reads the state file, runs the script, reads ALL abstracts, writes a neutral report, saves to llm-kb, and updates state.
+
+### Workflow
+
+1. **Read state:** Load `survey_state.json`, read `journals.{key}.current_year`
+2. **Collect:** Run the collection script with `--all-papers` (no keyword filter):
+   ```
+   python3 collect_lis_backissues.py --journal {journal_key} \
+     --year-start {year} --year-end {year} --all-papers --json
+   ```
+3. **Read & describe:** Read the generated report file. For every paper, extract what it does from the abstract and write a **neutral, factual summary** in Japanese. No thematic categorisation, no interpretation.
+4. **Save to llm-kb:** `/workspace/llm-kb.miya-lis.net/concepts/lis-journal-surveys/{journal}-{year}.md`.
+   Update `index.md` and `log.md`.
+5. **Update state:** Increment `current_year`. If `> 2026`, set `status: "complete"`.
+
+### Script Design (collect_lis_backissues.py)
+
+Key features:
+- `--all-papers` flag: omits the `?search=` query parameter, fetching ALL works for the source+year
+- `--journal {key}`: single-journal mode (one of 5 predefined sources)
+- `--year-start N --year-end N`: exact year(s); use same value for single-year
+- `--json`: saves structured data alongside the markdown report
+- Pagination up to 500 results with 100/page
+- Abstract reconstruction from OpenAlex inverted index
+- Saves to both `~/research_data/backissues/` and llm-kb
+
+The script's automatic theme classification (情報概念/情報哲学/AI) is for the **machine-generated tag column only**. The agent's written analysis must **not** use these categories.
+
+### Output Style (Mandatory)
+
+Each paper entry:
+```
+#### N. Title
+- **著者**: Authors
+- **日付**: Date | **被引用**: N
+- **DOI**: link
+- **内容**: [2–3 sentence factual summary based strictly on the abstract.
+   What does this paper investigate, using what method, finding what?
+   No interpretation, no praise, no theme-fitting.]
+```
+
+No sections like "Theme Distribution" or "注目すべき論文". No percentage breakdowns. No qualitative trend analysis. Just the papers, presented factually.
+
+### Coverage Timeline
+
+27 years per journal (2000–2026). With 5 journals in parallel:
+- **Per week:** 5 years total (one year per journal)
+- **Completion:** ~27 weeks (all 5 journals reach 2026 simultaneously)
+- **Average load per run:** 30–120 abstracts to read
+
+### Known Limitations
+
+- **JASIST (pre-2001):** Was "Journal of the American Society for Information Science (JASIS)". OpenAlex source S4210197613 may not include pre-2001 works. Check `counts_by_year`.
+- **ASIS&T Proc. (pre-2000s):** Earlier title "Proceedings of ASIS". Same issue.
+- **KO (pre-1993):** Was "International Classification". Coverage gaps.
+- **Some journals publish sporadically:** KO publishes ~5 papers/year; Library Trends publishes themed issues with ~8–12 papers per issue, 4 issues/year. Empty years are normal — report "該当期間の論文はありません" without further comment.
 
 ## Publisher TDM & Institutional Access Checks
 
@@ -255,6 +376,7 @@ Before relying on full-text retrieval, verify each publisher's policy:
 9. **J-Stage main pages require JavaScript** and return empty HTML without it. Use the `pubmode=listview` parameter on the browse URL to get article data in plain HTML. If that also fails, try `?lang=en` first before switching to browser tools.
 10. **Major publisher scraping blocks:** Wiley, SAGE, and Emerald block direct HTTP scraping with HTTP 403. Do not retry these — fall back to OpenAlex or Unpaywall immediately.
 11. **Old `informationr.net` SSL certificate** has expired/is mismatched for `www.informationr.net`. Use `https://publicera.kb.se/ir/` (the new platform) for Information Research access, or use `https://informationr.net/ir/` without the `www` prefix.
+12. **Historical journal name changes cause OpenAlex gaps.** Journals that changed names (JASIS→JASIST, ASIS→ASIS&T, International Classification→KO) may have incomplete archives under their current OpenAlex source ID. Check `counts_by_year` on the source endpoint to verify coverage before trusting «0 papers» results.
 
 ## Related Skills
 - `jstage-jslis-daily-summary` — Japanese LIS papers from J-STAGE/CiNii (complementary coverage for East Asian LIS literature)

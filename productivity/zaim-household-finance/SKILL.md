@@ -455,6 +455,17 @@ api.delete(mode='payment', money_id=12345)
 api.update(mode='payment', money_id=12345, amount=1500, comment='訂正')
 ```
 
+## Category Audit (カテゴリ監査)
+
+データ品質を保つため、食費カテゴリ外の取引に外食店名が含まれていないか、また食費内のジャンル割り当てが適切かを定期的にチェックする。
+
+監査用のSQLクエリ・キーワードリスト・修正手順は `references/category-audit.md` を参照。
+
+よくある誤検出パターン:
+- 「ざわ」→ くまざわ書店（書店）に誤マッチするので注意
+- モスバーガー等のファストフードが交際費/飲み会に分類されていないか確認
+- ウエルシアやAmazonでの食品購入は、一般的に日用雑貨として扱う（何を買ったか確認できない場合）
+
 ## Important Notes
 
 - **Rate limits**: Apply reasonable delays between API calls (at least 1 second)

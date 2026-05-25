@@ -399,6 +399,76 @@ tags = {t['id']: t['title'] for t in json.loads(terminal(f"curl -s {SP}/tags")['
 - **`references/api-limitations.md`** — SP Local REST API の制限詳細（`/executeGlobalCommand` の動作確認結果、ルーティング制限のテスト記録）。
 - **`skill: pomo`** — ポモドーロタイマー実装。SP と統合済み。
 
+## トラブルシューティング
+
+### SPの死活確認
+
+```bash
+# 1. APIサーバの応答確認
+curl -s http://localhost:3876/health
+# 正常: {"ok":true,"data":{"server":"up","rendererReady":true}}
+# 接続不可: curl: (7) Failed to connect → SP アプリ自体がダウン
+
+# 2. タスクデータの有無確認
+curl -s http://localhost:3876/tasks?includeDone=true
+# 空データ: {"ok":true,"data":[]} → SPが初期化状態（データ消失の可能性）
+
+# 3. プロジェクト一覧で消失範囲を確認
+curl -s http://localhost:3876/projects | jq -r '.data[].id'
+# INBOX_PROJECT しかない場合 → 全プロジェクト消失
+```
+
+### データ消失の検知
+
+SPが「応答はするがデータが空」の場合（クラッシュ再起動後など）:
+
+| 確認項目 | 正常な状態 | データ消失状態 |
+|---------|-----------|--------------|
+| `/tasks?includeDone=true` | タスク配列あり | `data: []` |
+| `/projects` | 複数プロジェクト | `INBOX_PROJECT` のみ |
+| `/tags` | TODAY, EM_IMPORTANT 等 | `TODAY` のみ（初期生成） |
+
+**復旧手段**:
+- バックアップがあれば SP のデータディレクトリに配置 → SP 再起動
+- なければプロジェクト・タスクを手動再作成
+
+### Watchdog（sp-task-watchdog.py）の診断
+
+`SPタスク変更通知` cron job は `no_agent=True` のスクリプト実行。以下の兆候でサイレント障害を検知する。
+
+```bash
+# 1. stateファイルの更新日時を確認（最新であるべき）
+stat ~/.hermes/scripts/sp-task-watchdog-state.json | grep Modify
+# 5分前が理想。数日前なら障害中
+
+# 2. stateファイルの中身を確認
+cat ~/.hermes/scripts/sp-task-watchdog-state.json
+# hashが空データのSHA-256（4f53cda18c2baa0c...）→ SPにタスクがない証拠
+
+# 3. cron job の最終実行結果を確認
+cronjob action=list
+# last_status: "ok" でも安心しない — スクリプトがエラーを握り潰すため
+
+# 4. 接続テスト（スクリプト視点で確認）
+python3 -c "
+import urllib.request, json
+try:
+    with urllib.request.urlopen('http://localhost:3876/tasks', timeout=10) as r:
+        d = json.loads(r.read().decode())
+        print(f'ok={d.get(\"ok\")}, tasks={len(d.get(\"data\", []))}')
+except Exception as e:
+    print(f'ERROR: {e}')
+"
+```
+
+**診断フロー**:
+1. `health` が200 → SPは生きている
+2. `/tasks` が空 → SPが初期化されている（Watchdogは監視対象なし）
+3. `health` が接続不可 → SPがダウン、Watchdogはサイレントに失敗
+4. stateファイルが古い → 診断(3)の状態が継続中
+
+状態ファイルが古いままだと次回の変更検知時に過去との差分比較ができないため、復旧後は `rm ~/.hermes/scripts/sp-task-watchdog-state.json` でリセットし、次回実行時にフル出力させること。
+
 ## 注意点・既知の問題
 
 - **Electron専用**: Web版やモバイル版では利用不可
@@ -411,3 +481,4 @@ tags = {t['id']: t['title'] for t in json.loads(terminal(f"curl -s {SP}/tags")['
 - **制限的ルーター**: SP Local REST API はホワイトリスト方式のルーティング。定義外のエンドポイントへの POST は `METHOD_NOT_FOUND` を返す。動的なコマンドディスパッチは行われない。
 - **タイムトラッキングの単位**: 時間系フィールドはすべて**ミリ秒**
 - **jq必須**: 上記の操作例は `jq` を前提としている
+- **ウォッチドッグスクリプトのサイレント障害**: `sp-task-watchdog.py` は SP に接続できない場合や空データを返された場合、何も出力せず `exit 0` で終了する。このためcronシステムには常に `ok` と記録され、障害に気づきにくい。stateファイルの更新日時が唯一の客観的指標。必ず上記「トラブルシューティング」セクションの診断手順で実効状態を確認すること。
