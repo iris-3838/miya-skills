@@ -301,16 +301,34 @@ def run_phase_task(task_id: str, *, kanban: Any, delegator: Any) -> Dict[str, An
             )
 
     if not socratic_converged:
-        try:
-            result = delegator.run(goal=goal, context=delegate_context, toolsets=["file", "web", "terminal"])
-        except Exception as exc:  # noqa: BLE001 - surfaced to kanban block
-            message = f"phase-worker failed: {exc}"
-            kanban.comment(task_id, f"Phase worker error for task {task_id}: {exc}")
-            kanban.block(task_id, message)
-            return {"status": "blocked", "error": str(exc), "phase": phase}
+        # C mode Phase 2-1: run the deterministic literature-acquisition engine
+        # instead of delegating the acquisition policy to a generic LLM worker.
+        if mode == "c" and phase == "2-1":
+            try:
+                from c_literature_acquisition import run_literature_acquisition  # type: ignore[import-untyped]
 
-        summary = str(result.get("summary") or f"Phase {phase} complete")
-        artifacts = result.get("artifacts") or {}
+                lit_result = run_literature_acquisition(
+                    body=body,
+                    workspace_path=workspace_path,
+                )
+            except Exception as exc:  # noqa: BLE001 - surfaced to kanban block
+                message = f"C mode Phase 2-1 literature acquisition failed: {exc}"
+                kanban.comment(task_id, f"Phase worker error for task {task_id}: {exc}")
+                kanban.block(task_id, message)
+                return {"status": "blocked", "error": str(exc), "phase": phase}
+            summary = str(lit_result.get("summary") or "Phase 2-1 literature acquisition complete")
+            artifacts = lit_result.get("artifacts") or {}
+        else:
+            try:
+                result = delegator.run(goal=goal, context=delegate_context, toolsets=["file", "web", "terminal"])
+            except Exception as exc:  # noqa: BLE001 - surfaced to kanban block
+                message = f"phase-worker failed: {exc}"
+                kanban.comment(task_id, f"Phase worker error for task {task_id}: {exc}")
+                kanban.block(task_id, message)
+                return {"status": "blocked", "error": str(exc), "phase": phase}
+
+            summary = str(result.get("summary") or f"Phase {phase} complete")
+            artifacts = result.get("artifacts") or {}
     else:
         # Socratic converged: summary and artifacts already set
         pass

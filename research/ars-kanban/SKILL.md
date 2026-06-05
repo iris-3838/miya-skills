@@ -20,11 +20,12 @@ Kanban tasks. Ported from the Claude Code ARS deep-research skill
 |------|------|
 | `scripts/phase_worker.py` | Single-phase dispatcher (phase 1-6, plus C mode `2-1`/`2-2`). Reads body JSON, calls mentor, writes `phase_result.json`, upgrades passport, syncs KB. |
 | `scripts/init_board.py` | Bootstrap: spawn ARS phase tasks onto a Kanban board. Supports `--mode socratic` and `--mode c`. |
+| `scripts/c_literature_acquisition.py` | C mode Phase 2-1 engine: OpenAlex search, CrossRef abstract fallback, Zotero collection creation/item mapping. Does not bypass paywalls. |
 | `scripts/passport_layer.py` | Material-passport validation/upgrade (Phase 5 enforcement). |
 | `scripts/kb_sync.py` | Persist phase result into the llm-kb wiki (best-effort). |
 | `scripts/socratic_phase.py` | Socratic dialogue mode for Phase 1. Block/unblock pattern for multi-turn user interaction. Persists state to `socratic_state.json`. |
 | `scripts/wording_patterns.py` | Wording-Pattern Advisory (Kong #257). Detects AI-typical research-question shells; suppressed by domain-native vocabulary. |
-| `tests/` | 102 unittest cases across 6 test modules. |
+| `tests/` | 109 unittest cases across 7 test modules. |
 
 ## Phase 1 Modes
 
@@ -91,6 +92,20 @@ research into:
    collection and may request another acquisition loop if gaps remain.
 
 ### Phase 2-1: Literature Acquisition Sources
+
+Implemented engine status:
+
+| Component | Status |
+|---|---|
+| OpenAlex search | Implemented (`search_openalex`) |
+| OpenAlex abstract reconstruction | Implemented |
+| CrossRef DOI fallback for missing abstracts | Implemented |
+| Zotero `deep-research/<project>` collection creation | Implemented |
+| Zotero metadata item creation | Implemented |
+| Paywalled full-text download | Explicitly not implemented |
+| J-STAGE collector | Planned |
+| CiNii Research collector | Planned |
+| Semantic Scholar collector | Planned, optional API key |
 
 Sources are configured in every C mode `2-1` task body under
 `c_mode.literature_sources`:
@@ -180,7 +195,7 @@ python scripts/phase_worker.py <task_id> --dry-run
 
 ```bash
 cd tests && python -m unittest discover -v
-# 102 tests, all green
+# 109 tests, all green
 ```
 
 ## Differences from Upstream Claude Code ARS

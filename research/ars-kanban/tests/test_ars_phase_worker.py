@@ -2,8 +2,11 @@
 
 import importlib.util
 import json
+import sys
 import tempfile
+import types
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 MODULE_PATH = Path("/opt/data/scripts/ars-kanban/phase_worker.py")
@@ -128,18 +131,25 @@ None
         }
         context = f"# Kanban task t_phase21: Phase 2-1\n\n## Body\n{json.dumps(body)}\n"
         kanban = FakeKanban(context)
-        delegator = FakeDelegator(result={"summary": "literature acquisition complete", "artifacts": {"zotero_collection": "deep-research/bates-vs-hjrland"}})
+        delegator = FakeDelegator()
+        calls = []
+        fake_module = types.SimpleNamespace(
+            run_literature_acquisition=lambda **kwargs: calls.append(kwargs) or {
+                "summary": "literature acquisition complete",
+                "artifacts": {"zotero_collection": "deep-research/bates-vs-hjrland"},
+            }
+        )
 
-        result = worker.run_phase_task("t_phase21", kanban=kanban, delegator=delegator)
+        with patch.dict(sys.modules, {"c_literature_acquisition": fake_module}):
+            result = worker.run_phase_task("t_phase21", kanban=kanban, delegator=delegator)
 
         self.assertEqual(result["status"], "completed")
         self.assertEqual(result["phase"], "2-1")
-        self.assertIn("Phase 2-1", delegator.calls[0]["goal"])
-        self.assertIn("Literature Acquisition", delegator.calls[0]["context"])
-        self.assertIn("OpenAlex", delegator.calls[0]["context"])
-        self.assertIn("CrossRef", delegator.calls[0]["context"])
-        self.assertIn("CiNii Research", delegator.calls[0]["context"])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["body"]["phase"], "2-1")
+        self.assertEqual(delegator.calls, [])
         self.assertEqual(kanban.completed[0][2]["phase"], "2-1")
+        self.assertEqual(kanban.completed[0][2]["artifacts"]["zotero_collection"], "deep-research/bates-vs-hjrland")
 
     def test_c_mode_phase_2_1_with_material_passport_does_not_type_error(self):
         worker = load_module()
@@ -163,8 +173,12 @@ None
         context = f"# Kanban task t_phase21: Phase 2-1\n\n## Body\n{json.dumps(body)}\n"
         kanban = FakeKanban(context)
         delegator = FakeDelegator(result={"summary": "ok", "artifacts": {}})
+        fake_module = types.SimpleNamespace(
+            run_literature_acquisition=lambda **kwargs: {"summary": "ok", "artifacts": {}}
+        )
 
-        result = worker.run_phase_task("t_phase21", kanban=kanban, delegator=delegator)
+        with patch.dict(sys.modules, {"c_literature_acquisition": fake_module}):
+            result = worker.run_phase_task("t_phase21", kanban=kanban, delegator=delegator)
 
         self.assertEqual(result["status"], "completed")
         upgraded = result["metadata"]["material_passport"]
