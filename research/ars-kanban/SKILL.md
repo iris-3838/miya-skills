@@ -25,7 +25,7 @@ Kanban tasks. Ported from the Claude Code ARS deep-research skill
 | `scripts/kb_sync.py` | Persist phase result into the llm-kb wiki (best-effort). |
 | `scripts/socratic_phase.py` | Socratic dialogue mode for Phase 1. Block/unblock pattern for multi-turn user interaction. Persists state to `socratic_state.json`. |
 | `scripts/wording_patterns.py` | Wording-Pattern Advisory (Kong #257). Detects AI-typical research-question shells; suppressed by domain-native vocabulary. |
-| `tests/` | 109 unittest cases across 7 test modules. |
+| `tests/` | 125 unittest cases across 8 test modules. |
 
 ## Phase 1 Modes
 
@@ -103,8 +103,8 @@ Implemented engine status:
 | Zotero `deep-research/<project>` collection creation | Implemented |
 | Zotero metadata item creation | Implemented |
 | Paywalled full-text download | Explicitly not implemented |
-| J-STAGE collector | Planned |
-| CiNii Research collector | Planned |
+| J-STAGE collector | Implemented (`parse_jstage_listview` + `search_jstage_recent`) |
+| CiNii Research collector | Implemented (`parse_cinii_opensearch` via OpenSearch JSON API) |
 | Semantic Scholar collector | Planned, optional API key |
 
 Sources are configured in every C mode `2-1` task body under
@@ -195,7 +195,7 @@ python scripts/phase_worker.py <task_id> --dry-run
 
 ```bash
 cd tests && python -m unittest discover -v
-# 109 tests, all green
+# 125 tests, all green
 ```
 
 ## Differences from Upstream Claude Code ARS

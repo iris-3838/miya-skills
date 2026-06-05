@@ -389,28 +389,7 @@ def parse_selection(text: str, max_count: int) -> list[int]:
     return result
 
 
-def collect_records_for_preview(
-    body: Dict[str, Any],
-    *,
-    workspace_path: Optional[str] = None,
-    fetcher=fetch_json,
-    per_page: int = 25,
-) -> list[Dict[str, Any]]:
-    """Search OpenAlex, enrich with CrossRef, dedupe, save records to workspace.
-
-    Returns the deduplicated record list.
-    """
-    topic = str(body.get("topic") or "")
-    records = search_openalex(topic, per_page=per_page, fetcher=fetcher) if topic else []
-    records = enrich_missing_abstracts_with_crossref(records, fetcher=fetcher)
-    records = dedupe_records(records)
-
-    if workspace_path:
-        records_path = Path(workspace_path) / PREVIEW_RECORDS_FILE
-        records_path.parent.mkdir(parents=True, exist_ok=True)
-        records_path.write_text(json.dumps(records, ensure_ascii=False) + "\n", encoding="utf-8")
-
-    return records
+# collect_records_for_preview — see the multi-source version defined below
 
 
 def export_selected_to_zotero(
@@ -465,6 +444,185 @@ def export_selected_to_zotero(
     export_path = workspace / ZOTERO_EXPORT_FILE
     export_path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return result
+
+
+# =========================================================================
+# J-STAGE collector (scraping per-journal pubmode=listview)
+# =========================================================================
+
+# Japanese Diamond OA LIS journals on J-STAGE
+JSTAGE_LIS_JOURNALS: dict[str, dict[str, Any]] = {
+    "jslis": {"name": "日本図書館情報学会誌", "url": "https://www.jstage.jst.go.jp/browse/jslis"},
+    "jsik": {"name": "情報知識学会誌", "url": "https://www.jstage.jst.go.jp/browse/jsik"},
+}
+DEFAULT_JSTAGE_JOURNALS = list(JSTAGE_LIS_JOURNALS.keys())
+
+
+def parse_jstage_listview(html: str, *, journal_key: str = "") -> list[Dict[str, Any]]:
+    """Parse J-STAGE pubmode=listview HTML into normalized records.
+
+    Reads the full article title from the ``title`` attribute of the blue-link
+    element. Extracts authors, DOIs, and OA PDF URLs where available.
+    """
+    import html as html_mod
+
+    records: list[Dict[str, Any]] = []
+    article_links = re.findall(
+        r'<a\s[^>]*href="(https?://www\.jstage\.jst\.go\.jp/article/[^"]+)"[^>]*'
+        r'class="bluelink-style customTooltip"[^>]*title="([^"]*)"[^>]*>',
+        html,
+    )
+    if not article_links:
+        return records
+
+    author_blocks = re.findall(r'class="listview-article__author"[^>]*>(.*?)</p>', html, re.DOTALL)
+    doi_links = re.findall(r'href="https?://doi\.org/([^"]+)"', html)
+    pdf_links = re.findall(r'href="(https?://www\.jstage\.jst\.go\.jp/article/[^"]+_pdf/[^"]*)"', html)
+
+    for i, (link_url, full_title) in enumerate(article_links):
+        doi = doi_links[i] if i < len(doi_links) else ""
+        pdf_url = pdf_links[i] if i < len(pdf_links) else ""
+        authors_raw = author_blocks[i] if i < len(author_blocks) else ""
+        authors = [a.strip() for a in re.split(r"[,、]", authors_raw) if a.strip()]
+
+        record: Dict[str, Any] = {
+            "source": "jstage",
+            "title": html_mod.unescape(full_title).strip(),
+            "doi": normalize_doi(doi) if doi else "",
+            "authors": authors,
+            "year": None,
+            "venue": journal_key.upper() if journal_key else "J-STAGE",
+            "abstract": "",
+            "is_oa": True,
+            "oa_status": "diamond",
+            "oa_url": pdf_url,
+            "cited_by_count": 0,
+        }
+        records.append(record)
+    return records
+
+
+def search_jstage_recent(
+    journal_key: str,
+    max_volumes: int = 2,
+    *,
+    fetcher: Any = None,
+) -> list[Dict[str, Any]]:
+    """Scrape recent volumes of a J-STAGE journal via pubmode=listview.
+
+    Fetches the browse page for each volume and parses article metadata.
+    """
+    import urllib.request
+
+    fetch = fetcher or (lambda url: urllib.request.urlopen(
+        urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    ).read().decode("utf-8"))
+
+    info = JSTAGE_LIS_JOURNALS.get(journal_key)
+    if not info:
+        return []
+
+    all_records: list[Dict[str, Any]] = []
+    base_url = info["url"]
+    for vol in range(1, max_volumes + 1):
+        url = f"{base_url}/{vol}/_contents/-char/ja?pubmode=listview"
+        try:
+            html_text = fetch(url)
+        except Exception:
+            continue
+        records = parse_jstage_listview(html_text, journal_key=journal_key)
+        for rec in records:
+            rec["year"] = 2026 - (vol - 1)  # heuristic
+        all_records.extend(records)
+    return all_records
+
+
+# =========================================================================
+# CiNii Research collector (OpenSearch JSON API)
+# =========================================================================
+
+CINII_OPENSEARCH_URL = "https://cir.nii.ac.jp/opensearch/articles"
+
+
+def parse_cinii_opensearch(data: Dict[str, Any]) -> list[Dict[str, Any]]:
+    """Parse CiNii Research OpenSearch JSON response into normalized records."""
+    items = data.get("items") or []
+    records: list[Dict[str, Any]] = []
+
+    for item in items:
+        title = str(item.get("title") or "")
+        creators = item.get("dc:creator") or []
+        if isinstance(creators, str):
+            creators = [creators]
+        authors = [str(a) for a in creators if a]
+        doi = item.get("prism:doi") or ""
+        if not doi:
+            for ident in item.get("dc:identifier") or []:
+                if isinstance(ident, dict) and ident.get("@type") in ("cir:DOI", "DOI"):
+                    doi = str(ident.get("@value") or "")
+                    break
+        pub_date = item.get("prism:publicationDate") or ""
+        year = None
+        if pub_date:
+            ym = re.match(r"(\d{4})", str(pub_date))
+            if ym:
+                year = int(ym.group(1))
+        abstract_raw = item.get("description") or ""
+        abstract = strip_markup(abstract_raw) if abstract_raw else ""
+        record: Dict[str, Any] = {
+            "source": "cinii",
+            "title": title,
+            "doi": normalize_doi(doi) if doi else "",
+            "authors": authors,
+            "year": year,
+            "venue": str(item.get("prism:publicationName") or ""),
+            "abstract": abstract,
+            "is_oa": False,
+            "oa_status": "unknown",
+            "oa_url": str(item.get("link") or ""),
+            "cited_by_count": 0,
+        }
+        records.append(record)
+    return records
+
+
+# =========================================================================
+# Updated collect_records_for_preview (multi-source)
+# =========================================================================
+
+
+def collect_records_for_preview(
+    body: Dict[str, Any],
+    *,
+    workspace_path: Optional[str] = None,
+    fetcher=fetch_json,
+    per_page: int = 25,
+) -> list[Dict[str, Any]]:
+    """Multi-source collection: OpenAlex + J-STAGE + CiNii Research.
+
+    Returns deduplicated records saved to workspace_path.
+    """
+    topic = str(body.get("topic") or "")
+    records = search_openalex(topic, per_page=per_page, fetcher=fetcher) if topic else []
+    records = enrich_missing_abstracts_with_crossref(records, fetcher=fetcher)
+    for jkey in DEFAULT_JSTAGE_JOURNALS:
+        try:
+            records.extend(search_jstage_recent(jkey, max_volumes=2))
+        except Exception:
+            pass
+    if topic:
+        try:
+            cinii_data = fetcher(f"{CINII_OPENSEARCH_URL}?q={urllib.parse.quote(topic)}&format=json")
+            if cinii_data:
+                records.extend(parse_cinii_opensearch(cinii_data)[:20])
+        except Exception:
+            pass
+    records = dedupe_records(records)
+    if workspace_path:
+        records_path = Path(workspace_path) / PREVIEW_RECORDS_FILE
+        records_path.parent.mkdir(parents=True, exist_ok=True)
+        records_path.write_text(json.dumps(records, ensure_ascii=False) + "\n", encoding="utf-8")
+    return records
 
 
 # =========================================================================
