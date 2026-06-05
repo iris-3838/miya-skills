@@ -12,7 +12,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Optional, Union
 
 HERMES = "/opt/hermes/bin/hermes"
 
@@ -28,7 +28,9 @@ except ImportError:
     pp = None  # type: ignore[assignment]
 
 
-PHASE_SPECS: Dict[int, Dict[str, Any]] = {
+PhaseKey = Union[int, str]
+
+PHASE_SPECS: Dict[PhaseKey, Dict[str, Any]] = {
     1: {
         "name": "Scoping",
         "agents": [
@@ -42,6 +44,18 @@ PHASE_SPECS: Dict[int, Dict[str, Any]] = {
         "name": "Investigation",
         "agents": ["bibliography_agent", "source_verification_agent"],
         "skills": ["deep-research"],
+    },
+    "2-1": {
+        "name": "Literature Acquisition",
+        "parent_phase": 2,
+        "agents": ["bibliography_agent", "source_verification_agent"],
+        "skills": ["deep-research", "zotero", "lis-journal"],
+    },
+    "2-2": {
+        "name": "Investigation (Zotero Corpus)",
+        "parent_phase": 2,
+        "agents": ["bibliography_agent", "source_verification_agent", "synthesis_agent"],
+        "skills": ["deep-research", "zotero", "lis-journal"],
     },
     3: {
         "name": "Analysis",
@@ -87,11 +101,12 @@ def extract_task_body(context_text: str) -> Dict[str, Any]:
     return parsed
 
 
-def phase_spec(phase: int) -> Dict[str, Any]:
+def phase_spec(phase: PhaseKey) -> Dict[str, Any]:
     """Return the configured ARS phase spec."""
+    key: PhaseKey = int(phase) if isinstance(phase, str) and phase.isdigit() else phase
     try:
-        return PHASE_SPECS[int(phase)]
-    except (KeyError, ValueError) as exc:
+        return PHASE_SPECS[key]
+    except KeyError as exc:
         raise ValueError(f"Unsupported ARS phase: {phase!r}") from exc
 
 
@@ -114,14 +129,54 @@ def write_phase_result(workspace_path: str, payload: Dict[str, Any]) -> str:
     return str(path)
 
 
-def build_phase_goal(task_id: str, phase: int, spec: Dict[str, Any], mode: str) -> str:
+def build_phase_goal(task_id: str, phase: PhaseKey, spec: Dict[str, Any], mode: str) -> str:
     return f"Run ARS Phase {phase} ({spec['name']}) for kanban task {task_id} in {mode} mode"
 
 
-def build_phase_context(task_id: str, phase: int, mode: str, spec: Dict[str, Any], kanban_context: str) -> str:
+def phase_version_label_for_worker(phase: PhaseKey, mode: str = "full") -> str:
+    """Return a version label for int or hierarchical phase keys."""
+    if mode == "c":
+        return f"phase{phase}-v0"
+    if pp is not None and isinstance(phase, int):
+        return pp.PHASE_VERSION_LABELS.get(phase, f"phase{phase}-v0")
+    return f"phase{phase}-v0"
+
+
+def previous_phase_dependency_label(phase: PhaseKey, mode: str = "full") -> Optional[str]:
+    """Return the upstream dependency label for a phase, if known."""
+    if mode == "c":
+        if phase == "2-1":
+            return "phase1-v0"
+        if phase == "2-2":
+            return "phase2-1-v0"
+        if phase == 3:
+            return "phase2-2-v0"
+        if isinstance(phase, int) and phase > 3:
+            return f"phase{phase - 1}-v0"
+        return None
+    if pp is not None and isinstance(phase, int) and phase > 1:
+        return pp.PHASE_VERSION_LABELS.get(phase - 1)
+    return None
+
+
+def _format_c_mode_context(kanban_context: str) -> str:
+    """Return C mode source-policy instructions for Phase 2-1/2-2 prompts."""
+    return (
+        "\n\nC MODE DEEP RESEARCH POLICY:\n"
+        "- Phase 2-1 Literature Acquisition collects metadata and OA full texts first.\n"
+        "- International sources: OpenAlex primary; CrossRef DOI metadata/abstract fallback.\n"
+        "- Japanese sources: J-STAGE primary for Diamond OA PDFs; CiNii Research supplement for domestic metadata and repository links.\n"
+        "- Semantic Scholar is optional and should be used only when SEMANTIC_SCHOLAR_API_KEY is available; use it for citation graph, references, citations, TLDR, and author metadata.\n"
+        "- Paywalled full texts must NOT be bypassed. Register metadata in Zotero and block for human full-text acquisition.\n"
+        "- Target Zotero collection: read c_mode.zotero_collection_path from the task body (usually deep-research/<project>).\n"
+        "- After human full-text acquisition, Phase 2-2 analyzes the Zotero corpus and may request a loop back to Phase 2-1 if gaps remain.\n"
+    )
+
+
+def build_phase_context(task_id: str, phase: PhaseKey, mode: str, spec: Dict[str, Any], kanban_context: str) -> str:
     agents = ", ".join(spec["agents"])
     skills = ", ".join(spec["skills"])
-    return (
+    base_context = (
         f"You are executing ARS Phase {phase}: {spec['name']}.\n"
         f"Mode: {mode}\n"
         f"Required agents: {agents}\n"
@@ -131,6 +186,9 @@ def build_phase_context(task_id: str, phase: int, mode: str, spec: Dict[str, Any
         f"KANBAN TASK ID: {task_id}\n\n"
         f"KANBAN CONTEXT:\n{kanban_context}"
     )
+    if mode == "c" and phase in ("2-1", "2-2"):
+        return base_context + _format_c_mode_context(kanban_context)
+    return base_context
 
 
 class KanbanCli:
@@ -194,7 +252,8 @@ def run_phase_task(task_id: str, *, kanban: Any, delegator: Any) -> Dict[str, An
     """Run one ARS phase task, completing or blocking the kanban card."""
     kanban_context = kanban.context(task_id)
     body = extract_task_body(kanban_context)
-    phase = int(body.get("phase", 0))
+    raw_phase = body.get("phase", 0)
+    phase: PhaseKey = int(raw_phase) if isinstance(raw_phase, str) and raw_phase.isdigit() else raw_phase
     mode = str(body.get("mode", "full"))
     spec = phase_spec(phase)
 
@@ -267,8 +326,8 @@ def run_phase_task(task_id: str, *, kanban: Any, delegator: Any) -> Dict[str, An
 
     # Phase 5: Upgrade passport with execution result
     if pp is not None and passport:
-        version_label = pp.PHASE_VERSION_LABELS.get(phase, f"phase{phase}-v0")
-        upstream_label = pp.PHASE_VERSION_LABELS.get(phase - 1) if phase > 1 else None
+        version_label = phase_version_label_for_worker(phase, mode)
+        upstream_label = previous_phase_dependency_label(phase, mode)
         upgraded = pp.upgrade_passport(
             passport,
             new_status="UNVERIFIED",

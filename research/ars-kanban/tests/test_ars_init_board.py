@@ -130,6 +130,58 @@ class TestArsInitBoard(unittest.TestCase):
         self.assertEqual(first["task_ids"], second["task_ids"])
         self.assertEqual(len(fake.created), 6)
         self.assertEqual(len(fake.links), 0)
+
+    def test_c_mode_expands_phase_2_into_literature_acquisition_and_zotero_investigation(self):
+        init_board = load_module()
+        fake = FakeKanban()
+        with tempfile.TemporaryDirectory() as tmp:
+            result = init_board.init_board(
+                "Bates vs Hjørland",
+                kanban=fake,
+                workspace_root=Path(tmp),
+                mode="c",
+                origin_date="2026-06-05T00:00:00Z",
+            )
+
+        self.assertEqual(len(fake.created), 7)
+        self.assertEqual(result["phase_sequence"], [1, "2-1", "2-2", 3, 4, 5, 6])
+        self.assertEqual([task["title"] for task in fake.created], [
+            "Phase 1: Scoping — Bates vs Hjørland",
+            "Phase 2-1: Literature Acquisition — Bates vs Hjørland",
+            "Phase 2-2: Investigation (Zotero Corpus) — Bates vs Hjørland",
+            "Phase 3: Analysis — Bates vs Hjørland",
+            "Phase 4: Composition — Bates vs Hjørland",
+            "Phase 5: Review — Bates vs Hjørland",
+            "Phase 6: Revision — Bates vs Hjørland",
+        ])
+        self.assertEqual(fake.created[1]["parent_ids"], [fake.created[0]["id"]])
+        self.assertEqual(fake.created[2]["parent_ids"], [fake.created[1]["id"]])
+        self.assertEqual(fake.created[3]["parent_ids"], [fake.created[2]["id"]])
+
+        phase21_body = json.loads(fake.created[1]["body"])
+        self.assertEqual(phase21_body["phase"], "2-1")
+        self.assertEqual(phase21_body["phase_name"], "Literature Acquisition")
+        self.assertEqual(phase21_body["parent_phase"], 2)
+        self.assertEqual(phase21_body["c_mode"]["zotero_collection_path"], "deep-research/bates-vs-hjrland")
+        self.assertEqual(phase21_body["c_mode"]["loop_count"], 0)
+        self.assertEqual(phase21_body["c_mode"]["max_loops"], 3)
+        self.assertEqual(phase21_body["material_passport"]["upstream_dependencies"], ["phase1-v0"])
+
+        phase22_body = json.loads(fake.created[2]["body"])
+        self.assertEqual(phase22_body["material_passport"]["upstream_dependencies"], ["phase2-1-v0"])
+        phase3_body = json.loads(fake.created[3]["body"])
+        self.assertEqual(phase3_body["material_passport"]["upstream_dependencies"], ["phase2-2-v0"])
+
+        sources = phase21_body["c_mode"]["literature_sources"]
+        self.assertEqual([s["id"] for s in sources], [
+            "openalex", "crossref", "jstage", "cinii_research", "semantic_scholar",
+        ])
+        self.assertEqual(sources[0]["role"], "primary-international")
+        self.assertEqual(sources[1]["role"], "doi-metadata-abstract-fallback")
+        self.assertEqual(sources[2]["role"], "primary-japanese-diamond-oa")
+        self.assertEqual(sources[3]["role"], "japanese-supplement")
+        self.assertTrue(sources[4]["optional"])
+        self.assertEqual(sources[4]["api_key_env"], "SEMANTIC_SCHOLAR_API_KEY")
     def test_kanban_cli_omits_assignee_when_not_requested(self):
         init_board = load_module()
 

@@ -1,10 +1,10 @@
 ---
 name: ars-kanban
-description: ARS (Academic Research System) phase workers that run via Hermes Kanban. Implements Phase 1-6 pipeline with Socratic dialogue mode and Wording-Pattern Advisory.
-version: 0.1.0
+description: ARS (Academic Research System) phase workers that run via Hermes Kanban. Implements Phase 1-6 pipeline with Socratic dialogue mode, C mode deep-research acquisition loop, and Wording-Pattern Advisory.
+version: 0.2.0
 metadata:
   hermes:
-    tags: [academic, research, kanban, phase-worker, socratic]
+    tags: [academic, research, kanban, phase-worker, socratic, zotero]
     category: academic
 ---
 
@@ -18,13 +18,13 @@ Kanban tasks. Ported from the Claude Code ARS deep-research skill
 
 | File | Role |
 |------|------|
-| `scripts/phase_worker.py` | Single-phase dispatcher (phase 1-6). Reads body JSON, calls mentor, writes `phase_result.json`, upgrades passport, syncs KB. |
-| `scripts/init_board.py` | Bootstrap: spawn the 6 ARS phase tasks onto a Kanban board. Supports `--mode socratic` for Phase 1. |
+| `scripts/phase_worker.py` | Single-phase dispatcher (phase 1-6, plus C mode `2-1`/`2-2`). Reads body JSON, calls mentor, writes `phase_result.json`, upgrades passport, syncs KB. |
+| `scripts/init_board.py` | Bootstrap: spawn ARS phase tasks onto a Kanban board. Supports `--mode socratic` and `--mode c`. |
 | `scripts/passport_layer.py` | Material-passport validation/upgrade (Phase 5 enforcement). |
 | `scripts/kb_sync.py` | Persist phase result into the llm-kb wiki (best-effort). |
 | `scripts/socratic_phase.py` | Socratic dialogue mode for Phase 1. Block/unblock pattern for multi-turn user interaction. Persists state to `socratic_state.json`. |
 | `scripts/wording_patterns.py` | Wording-Pattern Advisory (Kong #257). Detects AI-typical research-question shells; suppressed by domain-native vocabulary. |
-| `tests/` | 99 unittest cases across 6 test modules. |
+| `tests/` | 102 unittest cases across 6 test modules. |
 
 ## Phase 1 Modes
 
@@ -62,12 +62,101 @@ names, methodology signals).
 When triggered, posts a kanban comment with the original ARS advisory
 template. One advisory per pattern per session.
 
+## C Mode: Deep Research Acquisition Loop
+
+`mode: "c"` keeps the existing ARS numbering, but expands Phase 2 into a
+hierarchical deep-research loop:
+
+```text
+Phase 1: Scoping
+Phase 2: Investigation (Deep Research)
+  ├─ Phase 2-1: Literature Acquisition
+  └─ Phase 2-2: Investigation (Zotero Corpus)
+Phase 3: Analysis
+Phase 4: Composition
+Phase 5: Review
+Phase 6: Revision
+```
+
+### Rationale
+
+The standard B/full mode has strong research and critical-analysis ability, but
+cannot access paywalled full texts by principle. C mode therefore splits deep
+research into:
+
+1. **AI-automated metadata/OA acquisition** — collect OA papers and metadata.
+2. **Human full-text acquisition** — the user manually accesses institutional
+   databases (e.g. ProQuest/LISA) and attaches paywalled PDFs to Zotero.
+3. **Zotero-corpus investigation** — the agent analyzes the enriched Zotero
+   collection and may request another acquisition loop if gaps remain.
+
+### Phase 2-1: Literature Acquisition Sources
+
+Sources are configured in every C mode `2-1` task body under
+`c_mode.literature_sources`:
+
+| Source | Role | API key | Use |
+|---|---|---:|---|
+| OpenAlex | `primary-international` | No | International LIS journals; metadata, abstracts, OA status, OA URLs |
+| CrossRef | `doi-metadata-abstract-fallback` | No | DOI metadata and abstract fallback when OpenAlex abstracts are empty |
+| J-STAGE | `primary-japanese-diamond-oa` | No | Japanese LIS journals; metadata, abstracts, Diamond OA PDFs |
+| CiNii Research | `japanese-supplement` | No | Domestic literature not covered by J-STAGE; metadata and repository links |
+| Semantic Scholar | `citation-network-supplement` | Optional (`SEMANTIC_SCHOLAR_API_KEY`) | Citation graph, references/citations, TLDR, author metadata |
+
+Contract-sensitive sources such as LISTA/LISA/ProQuest are **not scraped**.
+Instead, Phase 2-1 registers metadata and blocks for human full-text acquisition.
+
+### Zotero Layout
+
+```text
+Zotero Library/
+  deep-research/
+    <project-slug>/
+      <OpenAlex metadata + OA PDFs>
+      <CrossRef-enriched metadata>
+      <J-STAGE PDFs>
+      <CiNii Research metadata>
+      <manual paywalled full-text attachments added by the user>
+```
+
+The project path is stored as:
+
+```json
+"c_mode": {
+  "zotero_collection_path": "deep-research/<project-slug>",
+  "loop_count": 0,
+  "max_loops": 3
+}
+```
+
+### Phase 2-2: Investigation (Zotero Corpus)
+
+Phase 2-2 reads the Zotero project collection, analyzes OA PDFs plus manually
+attached full texts, and detects gaps. If important gaps remain, it can request
+a loop back to Phase 2-1; otherwise the workflow proceeds to Phase 3.
+
+### C Mode Example Prompt
+
+```text
+C modeで「Bates vs Hjørland の情報概念対立」についてdeep researchしたい。
+
+init_board.pyを --mode c で起動して、Phase 2を2-1/2-2に分けてください。
+2-1ではOpenAlex, CrossRef, J-STAGE, CiNii Researchで書誌・abstract・OA全文を集め、
+Zoteroの deep-research/bates-vs-hjrland に登録してください。
+Semantic Scholar keyがあれば引用ネットワーク補完にも使ってください。
+
+ペイウォール本文は迂回せず、書誌だけ登録して人手取得待ちでblockしてください。
+私がProQuest等でPDFをZoteroに追加したらunblockするので、2-2でZotero corpusを分析してください。
+```
+
 ## Phase Routing
 
 | Phase | Name | Default Agents |
 |-------|------|----------------|
 | 1 | Scoping | research_question, research_architect, devils_advocate |
 | 2 | Investigation | bibliography, source_verification |
+| 2-1 | Literature Acquisition | bibliography, source_verification |
+| 2-2 | Investigation (Zotero Corpus) | bibliography, source_verification, synthesis |
 | 3 | Analysis | synthesis, devils_advocate |
 | 4 | Composition | report_compiler |
 | 5 | Review | editor_in_chief, ethics_review, devils_advocate |
@@ -79,8 +168,8 @@ template. One advisory per pattern per session.
 # Bootstrap a board for a topic
 python scripts/init_board.py "Bates vs Hjørland information concepts" --mode socratic
 
-# (Alternative) Socratic mode
-python scripts/init_board.py "Topic" --mode socratic
+# C mode: Phase 2 becomes 2-1/2-2 deep-research acquisition loop
+python scripts/init_board.py "Bates vs Hjørland information concepts" --mode c
 
 # Run a single phase task
 python scripts/phase_worker.py <task_id>
@@ -91,7 +180,7 @@ python scripts/phase_worker.py <task_id> --dry-run
 
 ```bash
 cd tests && python -m unittest discover -v
-# 99 tests, all green
+# 102 tests, all green
 ```
 
 ## Differences from Upstream Claude Code ARS

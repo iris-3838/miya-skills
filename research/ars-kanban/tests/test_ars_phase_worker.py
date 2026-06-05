@@ -99,6 +99,105 @@ None
         )
         self.assertIn("deep-research", spec["skills"])
 
+    def test_phase_spec_accepts_c_mode_hierarchical_phase_keys(self):
+        worker = load_module()
+        spec21 = worker.phase_spec("2-1")
+        spec22 = worker.phase_spec("2-2")
+        self.assertEqual(spec21["name"], "Literature Acquisition")
+        self.assertEqual(spec21["parent_phase"], 2)
+        self.assertEqual(spec22["name"], "Investigation (Zotero Corpus)")
+        self.assertEqual(spec22["parent_phase"], 2)
+        self.assertIn("deep-research", spec21["skills"])
+
+    def test_run_phase_task_handles_c_mode_phase_2_1_without_int_casting(self):
+        worker = load_module()
+        body = {
+            "phase": "2-1",
+            "mode": "c",
+            "topic": "Bates vs Hjørland",
+            "c_mode": {
+                "zotero_collection_path": "deep-research/bates-vs-hjrland",
+                "literature_sources": [
+                    {"id": "openalex", "role": "primary-international"},
+                    {"id": "crossref", "role": "doi-metadata-abstract-fallback"},
+                    {"id": "jstage", "role": "primary-japanese-diamond-oa"},
+                    {"id": "cinii_research", "role": "japanese-supplement"},
+                    {"id": "semantic_scholar", "role": "citation-network-supplement", "optional": True},
+                ],
+            },
+        }
+        context = f"# Kanban task t_phase21: Phase 2-1\n\n## Body\n{json.dumps(body)}\n"
+        kanban = FakeKanban(context)
+        delegator = FakeDelegator(result={"summary": "literature acquisition complete", "artifacts": {"zotero_collection": "deep-research/bates-vs-hjrland"}})
+
+        result = worker.run_phase_task("t_phase21", kanban=kanban, delegator=delegator)
+
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["phase"], "2-1")
+        self.assertIn("Phase 2-1", delegator.calls[0]["goal"])
+        self.assertIn("Literature Acquisition", delegator.calls[0]["context"])
+        self.assertIn("OpenAlex", delegator.calls[0]["context"])
+        self.assertIn("CrossRef", delegator.calls[0]["context"])
+        self.assertIn("CiNii Research", delegator.calls[0]["context"])
+        self.assertEqual(kanban.completed[0][2]["phase"], "2-1")
+
+    def test_c_mode_phase_2_1_with_material_passport_does_not_type_error(self):
+        worker = load_module()
+        passport = {
+            "origin_skill": "deep-research",
+            "origin_mode": "c",
+            "origin_date": "2026-06-05T00:00:00Z",
+            "verification_status": "UNVERIFIED",
+            "version_label": "phase2-1-v0",
+        }
+        body = {
+            "phase": "2-1",
+            "mode": "c",
+            "topic": "Bates vs Hjørland",
+            "material_passport": passport,
+            "c_mode": {
+                "zotero_collection_path": "deep-research/bates-vs-hjrland",
+                "literature_sources": [],
+            },
+        }
+        context = f"# Kanban task t_phase21: Phase 2-1\n\n## Body\n{json.dumps(body)}\n"
+        kanban = FakeKanban(context)
+        delegator = FakeDelegator(result={"summary": "ok", "artifacts": {}})
+
+        result = worker.run_phase_task("t_phase21", kanban=kanban, delegator=delegator)
+
+        self.assertEqual(result["status"], "completed")
+        upgraded = result["metadata"]["material_passport"]
+        self.assertEqual(upgraded["version_label"], "phase2-1-v0")
+        self.assertEqual(upgraded["upstream_dependencies"], ["phase1-v0"])
+
+    def test_c_mode_phase_3_depends_on_phase_2_2_not_standard_phase_2(self):
+        worker = load_module()
+        passport = {
+            "origin_skill": "deep-research",
+            "origin_mode": "c",
+            "origin_date": "2026-06-05T00:00:00Z",
+            "verification_status": "UNVERIFIED",
+            "version_label": "phase3-v0",
+            "upstream_dependencies": ["phase2-2-v0"],
+        }
+        body = {
+            "phase": 3,
+            "mode": "c",
+            "topic": "Bates vs Hjørland",
+            "material_passport": passport,
+        }
+        context = f"# Kanban task t_phase3: Phase 3\n\n## Body\n{json.dumps(body)}\n"
+        kanban = FakeKanban(context)
+        delegator = FakeDelegator(result={"summary": "ok", "artifacts": {}})
+
+        result = worker.run_phase_task("t_phase3", kanban=kanban, delegator=delegator)
+
+        self.assertEqual(result["status"], "completed")
+        upgraded = result["metadata"]["material_passport"]
+        self.assertEqual(upgraded["version_label"], "phase3-v0")
+        self.assertEqual(upgraded["upstream_dependencies"], ["phase2-2-v0"])
+
     def test_run_phase_task_completes_successful_delegate_result(self):
         worker = load_module()
         context = """# Kanban task t_phase1: Phase 1

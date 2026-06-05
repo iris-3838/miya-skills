@@ -15,12 +15,14 @@ import subprocess
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Optional, Union
 
 HERMES = "/opt/hermes/bin/hermes"
 DEFAULT_WORKSPACE_ROOT = Path("/opt/data/workspace/ars-kanban-runs")
 
-PHASE_SPECS: Dict[int, Dict[str, Any]] = {
+PhaseKey = Union[int, str]
+
+PHASE_SPECS: Dict[PhaseKey, Dict[str, Any]] = {
     1: {
         "name": "Scoping",
         "agents": [
@@ -31,6 +33,16 @@ PHASE_SPECS: Dict[int, Dict[str, Any]] = {
     },
     2: {
         "name": "Investigation",
+        "agents": ["bibliography_agent", "source_verification_agent"],
+    },
+    "2-1": {
+        "name": "Literature Acquisition",
+        "parent_phase": 2,
+        "agents": ["bibliography_agent", "source_verification_agent"],
+    },
+    "2-2": {
+        "name": "Investigation (Zotero Corpus)",
+        "parent_phase": 2,
         "agents": ["bibliography_agent", "source_verification_agent"],
     },
     3: {
@@ -51,6 +63,48 @@ PHASE_SPECS: Dict[int, Dict[str, Any]] = {
     },
 }
 
+C_MODE_LITERATURE_SOURCES = [
+    {
+        "id": "openalex",
+        "role": "primary-international",
+        "api_key_required": False,
+        "coverage": "International LIS journals: metadata, abstracts, OA status, OA URLs",
+    },
+    {
+        "id": "crossref",
+        "role": "doi-metadata-abstract-fallback",
+        "api_key_required": False,
+        "coverage": "DOI metadata and abstract fallback when OpenAlex abstracts are empty",
+    },
+    {
+        "id": "jstage",
+        "role": "primary-japanese-diamond-oa",
+        "api_key_required": False,
+        "coverage": "Japanese LIS journals on J-STAGE: metadata, abstracts, Diamond OA PDFs",
+    },
+    {
+        "id": "cinii_research",
+        "role": "japanese-supplement",
+        "api_key_required": False,
+        "coverage": "Japanese literature not covered by J-STAGE: metadata and repository links",
+    },
+    {
+        "id": "semantic_scholar",
+        "role": "citation-network-supplement",
+        "api_key_required": True,
+        "api_key_env": "SEMANTIC_SCHOLAR_API_KEY",
+        "optional": True,
+        "coverage": "Citation graph, references, citations, TLDR, author metadata",
+    },
+]
+
+
+def phase_sequence_for_mode(mode: str) -> list[PhaseKey]:
+    """Return the task phase sequence for an ARS mode."""
+    if mode == "c":
+        return [1, "2-1", "2-2", 3, 4, 5, 6]
+    return [1, 2, 3, 4, 5, 6]
+
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -68,17 +122,30 @@ def board_slug_for_topic(topic: str) -> str:
     return f"ars-{slugify_topic(topic)}"
 
 
-def build_material_passport(*, topic: str, mode: str, phase: int, origin_date: str) -> Dict[str, Any]:
+def phase_version_label(phase: PhaseKey) -> str:
+    """Return the Material Passport version label for a phase key."""
+    return f"phase{phase}-v0"
+
+
+def build_material_passport(
+    *,
+    topic: str,
+    mode: str,
+    phase: PhaseKey,
+    origin_date: str,
+    previous_phase: Optional[PhaseKey] = None,
+) -> Dict[str, Any]:
     """Build Schema 9-compatible Material Passport metadata for a phase task."""
+    upstream_dependencies = [phase_version_label(previous_phase)] if previous_phase is not None else []
     return {
         "origin_skill": "deep-research",
         "origin_mode": mode,
         "origin_date": origin_date,
         "verification_status": "UNVERIFIED",
-        "version_label": f"phase{phase}-v0",
+        "version_label": phase_version_label(phase),
         "integrity_pass_date": None,
         "content_hash": None,
-        "upstream_dependencies": [f"phase{phase - 1}-v0"] if phase > 1 else [],
+        "upstream_dependencies": upstream_dependencies,
         # Schema 9 v3.3.5 says repro_lock must exist; null is an honest opt-out.
         "repro_lock": None,
         "reset_boundary": [],
@@ -87,9 +154,32 @@ def build_material_passport(*, topic: str, mode: str, phase: int, origin_date: s
     }
 
 
-def build_task_body(*, topic: str, board_slug: str, phase: int, mode: str, origin_date: str) -> Dict[str, Any]:
-    spec = PHASE_SPECS[phase]
+def build_c_mode_state(*, topic: str, loop_count: int = 0, max_loops: int = 3) -> Dict[str, Any]:
+    """Return C mode deep-research loop state embedded in Phase 2-x tasks."""
     return {
+        "loop_count": loop_count,
+        "max_loops": max_loops,
+        "zotero_collection_path": f"deep-research/{slugify_topic(topic)}",
+        "literature_sources": list(C_MODE_LITERATURE_SOURCES),
+        "manual_fulltext_required": True,
+        "human_handoff": (
+            "After Phase 2-1, manually add paywalled full texts to the Zotero "
+            "deep-research project collection, then unblock Phase 2-2."
+        ),
+    }
+
+
+def build_task_body(
+    *,
+    topic: str,
+    board_slug: str,
+    phase: PhaseKey,
+    mode: str,
+    origin_date: str,
+    previous_phase: Optional[PhaseKey] = None,
+) -> Dict[str, Any]:
+    spec = PHASE_SPECS[phase]
+    body = {
         "workflow": "ars-kanban",
         "board_slug": board_slug,
         "topic": topic,
@@ -102,8 +192,14 @@ def build_task_body(*, topic: str, board_slug: str, phase: int, mode: str, origi
             mode=mode,
             phase=phase,
             origin_date=origin_date,
+            previous_phase=previous_phase,
         ),
     }
+    if "parent_phase" in spec:
+        body["parent_phase"] = spec["parent_phase"]
+    if mode == "c" and phase in ("2-1", "2-2"):
+        body["c_mode"] = build_c_mode_state(topic=topic)
+    return body
 
 
 class KanbanCli:
@@ -180,12 +276,21 @@ def init_board(
         default_workdir=str(run_workspace),
     )
 
-    task_ids: Dict[int, str] = {}
+    task_ids: Dict[PhaseKey, str] = {}
     tasks: list[Dict[str, Any]] = []
-    for phase in sorted(PHASE_SPECS):
+    phase_sequence = phase_sequence_for_mode(mode)
+    previous_phase: Optional[PhaseKey] = None
+    for phase in phase_sequence:
         spec = PHASE_SPECS[phase]
-        body = build_task_body(topic=topic, board_slug=board_slug, phase=phase, mode=mode, origin_date=origin_date)
-        parent_ids = [task_ids[phase - 1]] if phase > 1 else []
+        body = build_task_body(
+            topic=topic,
+            board_slug=board_slug,
+            phase=phase,
+            mode=mode,
+            origin_date=origin_date,
+            previous_phase=previous_phase,
+        )
+        parent_ids = [task_ids[previous_phase]] if previous_phase is not None else []
         phase_workspace = run_workspace / f"phase-{phase}"
         phase_workspace.mkdir(parents=True, exist_ok=True)
         task = kanban.create_task(
@@ -200,11 +305,13 @@ def init_board(
         task_id = task["id"]
         task_ids[phase] = task_id
         tasks.append(task)
+        previous_phase = phase
 
     return {
         "board_slug": board_slug,
         "workspace": str(run_workspace),
-        "task_ids": [task_ids[phase] for phase in sorted(task_ids)],
+        "phase_sequence": phase_sequence,
+        "task_ids": [task_ids[phase] for phase in phase_sequence],
         "tasks": tasks,
     }
 
