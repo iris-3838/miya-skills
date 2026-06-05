@@ -1,6 +1,8 @@
 """Tests for ARS C mode Phase 2-1 literature acquisition engine."""
 
 import importlib.util
+import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -122,6 +124,103 @@ class TestZoteroMapping(unittest.TestCase):
         self.assertEqual([c["data"]["name"] for c in z.created_collections], ["deep-research", "bates-vs-hjorland"])
         self.assertFalse(z.created_collections[0]["data"]["parentCollection"])
         self.assertEqual(z.created_collections[1]["data"]["parentCollection"], "C00001")
+
+
+class TestRecordPreview(unittest.TestCase):
+    def setUp(self):
+        self.mod = load_module()
+        self.records = [
+            {"title": "Information as thing", "authors": ["Marcia Bates"], "year": 2006, "venue": "JASIST", "doi": "10.1002/asi.123", "is_oa": True, "source": "openalex", "abstract": "A foundational paper."},
+            {"title": "Domain analysis", "authors": ["Birger Hjørland"], "year": 2002, "venue": "JDoc", "doi": "10.1108/abc", "is_oa": False, "source": "openalex", "abstract": "A methodological paper."},
+            {"title": "Information needs and information seeking", "authors": ["Carol Kuhlthau", "T.D. Wilson"], "year": 2000, "venue": "LISR", "doi": "", "is_oa": False, "source": "openalex", "abstract": ""},
+        ]
+
+    def test_format_records_for_preview_numbers_correctly(self):
+        text = self.mod.format_records_for_preview(self.records)
+        self.assertIn("[1]", text)
+        self.assertIn("[2]", text)
+        self.assertIn("[3]", text)
+        self.assertIn("Marcia Bates", text)
+        self.assertIn("🟢 OA", text)
+        self.assertIn("🔒 non-OA", text)
+        self.assertIn("(no abstract)", text)
+        self.assertIn("10.1002/asi.123", text)
+
+    def test_parse_selection_handles_ranges_and_commas(self):
+        parse = self.mod.parse_selection
+        self.assertEqual(parse("1,3", 10), [0, 2])
+        self.assertEqual(parse("1,3,5-8,10", 10), [0, 2, 4, 5, 6, 7, 9])
+        self.assertEqual(parse("all", 5), [0, 1, 2, 3, 4])
+        self.assertEqual(parse(" ALL ", 3), [0, 1, 2])
+        self.assertEqual(parse("", 5), [])
+        self.assertEqual(parse("0,100", 5), [])  # out of range
+        self.assertEqual(parse("2,1", 5), [0, 1])  # deduped + sorted
+
+
+class TestTwoPhaseWorkflow(unittest.TestCase):
+    def test_collect_records_for_preview_saves_to_workspace(self):
+        mod = load_module()
+        body = {"topic": "information behavior", "c_mode": {"zotero_collection_path": "deep-research/test"}}
+
+        def fake_fetcher(url, params):
+            return {"results": [
+                {"id": "W1", "doi": "10.1/test", "title": "Test paper", "publication_year": 2024,
+                 "authorships": [{"author": {"display_name": "Alice"}}],
+                 "abstract_inverted_index": {"Test": [0]},
+                 "open_access": {"is_oa": False, "oa_status": "", "oa_url": ""},
+                 "primary_location": {"source": {"display_name": "Test Journal"}},
+                 "cited_by_count": 5},
+            ]}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            records = mod.collect_records_for_preview(body, workspace_path=tmp, fetcher=fake_fetcher)
+            self.assertEqual(len(records), 1)
+            records_path = Path(tmp) / "literature_records.json"
+            self.assertTrue(records_path.exists())
+            loaded = json.loads(records_path.read_text())
+            self.assertEqual(len(loaded), 1)
+            self.assertEqual(loaded[0]["title"], "Test paper")
+
+    def test_export_selected_to_zotero_registers_only_selected(self):
+        mod = load_module()
+        z = FakeZotero()
+        records = [{"title": f"Paper{i}", "doi": f"10.{i}/test", "authors": ["Author"], "year": 2025, "venue": "J", "source": "openalex", "is_oa": False, "oa_url": "", "abstract": "abstract"} for i in range(5)]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            records_path = Path(tmp) / "literature_records.json"
+            records_path.write_text(json.dumps(records, ensure_ascii=False) + "\n")
+            result = mod.export_selected_to_zotero(tmp, [0, 2, 4], zotero=z, collection_path="deep-research/test")
+            self.assertEqual(result["selected"], 3)
+            self.assertEqual(result["total"], 5)
+            self.assertEqual(len(z.created_items), 3)
+            self.assertEqual(z.created_items[0]["title"], "Paper0")
+            self.assertEqual(z.created_items[1]["title"], "Paper2")
+            self.assertEqual(z.created_items[2]["title"], "Paper4")
+
+    def test_export_selected_to_zotero_rejects_empty_collection_no_zotero(self):
+        mod = load_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            records_path = Path(tmp) / "literature_records.json"
+            records_path.write_text("[]")
+            result = mod.export_selected_to_zotero(tmp, [], zotero=None, collection_path="deep-research/test")
+            self.assertIn("skipped", result["status"])
+
+    def test_export_selected_to_zotero_writes_success_file(self):
+        mod = load_module()
+        z = FakeZotero()
+        records = [{"title": "Paper", "doi": "10.1/abc", "authors": ["Author"], "year": 2025, "venue": "J", "source": "openalex", "is_oa": True, "oa_url": "", "abstract": "A"}]
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "literature_records.json").write_text(json.dumps(records) + "\n")
+            result = mod.export_selected_to_zotero(tmp, [0], zotero=z, collection_path="deep-research/test")
+            export_path = Path(tmp) / "zotero_export.json"
+            self.assertTrue(export_path.exists())
+            export_data = json.loads(export_path.read_text())
+            self.assertEqual(export_data["collection_path"], "deep-research/test")
+
+    def test_parse_selection_accepts_newlines_and_spaces(self):
+        mod = load_module()
+        self.assertEqual(mod.parse_selection("1 2 3\n4", 5), [0, 1, 2, 3])
+        self.assertEqual(mod.parse_selection("1, 2, 3", 5), [0, 1, 2])
 
 
 if __name__ == "__main__":

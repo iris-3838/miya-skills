@@ -301,23 +301,56 @@ def run_phase_task(task_id: str, *, kanban: Any, delegator: Any) -> Dict[str, An
             )
 
     if not socratic_converged:
-        # C mode Phase 2-1: run the deterministic literature-acquisition engine
-        # instead of delegating the acquisition policy to a generic LLM worker.
+        # C mode Phase 2-1: two-phase flow (preview → user selection → Zotero export)
         if mode == "c" and phase == "2-1":
             try:
-                from c_literature_acquisition import run_literature_acquisition  # type: ignore[import-untyped]
-
-                lit_result = run_literature_acquisition(
-                    body=body,
-                    workspace_path=workspace_path,
+                from c_literature_acquisition import (
+                    collect_records_for_preview, format_records_for_preview,
+                    parse_selection, export_selected_to_zotero,
                 )
+                from socratic_phase import extract_last_user_comment  # type: ignore[import-untyped]
+                from c_literature_acquisition import PREVIEW_RECORDS_FILE, ZOTERO_EXPORT_FILE
+
+                ws = Path(workspace_path) if workspace_path else None
+                records_file = (ws / PREVIEW_RECORDS_FILE) if ws else None
+                export_file = (ws / ZOTERO_EXPORT_FILE) if ws else None
+
+                if not workspace_path or not records_file or not records_file.exists():
+                    # === Phase 1: Preview → block ===
+                    records = collect_records_for_preview(body, workspace_path=workspace_path)
+                    if not records:
+                        summary = f"No literature records found for {body.get('topic', '')!r}. Phase 2-1 complete."
+                        artifacts = {"record_count": 0, "records": []}
+                    else:
+                        preview = format_records_for_preview(records)
+                        kanban.comment(task_id, f"## 📚 Literature Acquisition: {len(records)} records found\n\n{preview}")
+                        kanban.block(task_id, f"Select records to export to Zotero ({len(records)} available). Reply with numbers (e.g. `1,3,5-8`) or `all`.")
+                        return {"status": "blocked", "phase": phase, "reason": "awaiting_selection"}
+                else:
+                    # === Phase 2: Resume — parse user selection, export to Zotero ===
+                    user_reply = extract_last_user_comment(kanban_context) or ""
+                    selection = parse_selection(user_reply, len(json.loads(records_file.read_text())))
+                    collection_path = (body.get("c_mode") or {}).get("zotero_collection_path") or f"deep-research/{body.get('topic', 'research')}"
+                    export_result = export_selected_to_zotero(
+                        workspace_path, selection, collection_path=collection_path,
+                    )
+                    summary = (
+                        f"Exported {export_result['selected']} of {export_result['total']} "
+                        f"records to Zotero collection `{collection_path}`. "
+                        "Manually add paywalled PDFs to Zotero, then proceed to Phase 2-2."
+                    )
+                    artifacts = {
+                        "record_count": export_result["total"],
+                        "selected_count": export_result["selected"],
+                        "zotero_collection_path": collection_path,
+                        "zotero_export": export_result,
+                        "sources_used": ["openalex", "crossref"],
+                    }
             except Exception as exc:  # noqa: BLE001 - surfaced to kanban block
                 message = f"C mode Phase 2-1 literature acquisition failed: {exc}"
                 kanban.comment(task_id, f"Phase worker error for task {task_id}: {exc}")
                 kanban.block(task_id, message)
                 return {"status": "blocked", "error": str(exc), "phase": phase}
-            summary = str(lit_result.get("summary") or "Phase 2-1 literature acquisition complete")
-            artifacts = lit_result.get("artifacts") or {}
         else:
             try:
                 result = delegator.run(goal=goal, context=delegate_context, toolsets=["file", "web", "terminal"])

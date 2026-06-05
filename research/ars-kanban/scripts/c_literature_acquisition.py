@@ -26,6 +26,9 @@ USER_AGENT = "HermesAgent/ars-kanban-c-mode/0.1 (mailto:rseimiya+iris@miya-lis.n
 OPENALEX_WORKS_URL = "https://api.openalex.org/works"
 CROSSREF_WORKS_URL = "https://api.crossref.org/works"
 
+PREVIEW_RECORDS_FILE = "literature_records.json"
+ZOTERO_EXPORT_FILE = "zotero_export.json"
+
 
 def reconstruct_openalex_abstract(inverted_index: Optional[Dict[str, Sequence[int]]]) -> str:
     """Reconstruct OpenAlex abstract from abstract_inverted_index."""
@@ -305,6 +308,168 @@ def load_zotero_client() -> Any:
     cred_path = Path("/opt/data/workspace/.skills/zotero_credentials.json")
     creds = json.loads(cred_path.read_text(encoding="utf-8"))
     return Zotero(creds["user_id"], "user", creds["api_key"])
+
+
+# =========================================================================
+# Preview/selection workflow (review-then-export, no auto-register)
+# =========================================================================
+
+
+def format_records_for_preview(records: list[Dict[str, Any]]) -> str:
+    """Build a numbered markdown preview for kanban comment.
+
+    Each entry shows: [N] Author(s) (year). Title. Venue. OA badge.
+    """
+    lines = ["The following records were found. **Reply with numbers to export** "
+             "(e.g., `1,3,5-8,10` or `all`), then unblock this task.\n"]
+    for i, rec in enumerate(records, start=1):
+        authors = ", ".join(rec.get("authors") or [])[:80]
+        title = (rec.get("title") or "Untitled")[:120]
+        venue = (rec.get("venue") or "")[:60]
+        year = rec.get("year") or "?"
+        doi = rec.get("doi") or "-"
+        oa_badge = "🟢 OA" if rec.get("is_oa") else "🔒 non-OA"
+        abstract = rec.get("abstract") or "(no abstract)"
+        abstract_snippet = abstract[:150]
+        lines.append(
+            f"  **[{i}]** {authors} ({year}). *{title}*. "
+            f"*{venue}* — {oa_badge}\n"
+            f"      DOI: {doi}\n"
+            f"      > {abstract_snippet}"
+        )
+    lines.append(
+        f"\n---\n{len(records)} records total. "
+        "Select which ones to add to Zotero. "
+        "Paywalled PDFs will not be downloaded — add them to Zotero manually."
+    )
+    return "\n".join(lines)
+
+
+def parse_selection(text: str, max_count: int) -> list[int]:
+    """Parse user selection (e.g. '1,3,5-8,10') into 0-based index list.
+
+    Supports commas, ranges, spaces, and the literal 'all'.
+    Indices outside [1, max_count] are silently dropped.
+    Returns deduplicated, sorted list.
+    """
+    stripped = text.strip().lower()
+    if not stripped:
+        return []
+    if stripped == "all":
+        return list(range(max_count))
+
+    # Replace newlines with commas, split on comma/space
+    tokens = re.split(r"[\s,]+", stripped)
+    seen: set[int] = set()
+    result: list[int] = []
+    for token in tokens:
+        token = token.strip()
+        if not token:
+            continue
+        # Range: "5-8"
+        range_match = re.match(r"^(\d+)\s*-\s*(\d+)$", token)
+        if range_match:
+            lo, hi = int(range_match.group(1)), int(range_match.group(2))
+            for num in range(lo, hi + 1):
+                idx = num - 1
+                if 0 <= idx < max_count and idx not in seen:
+                    seen.add(idx)
+                    result.append(idx)
+            continue
+        # Single number
+        try:
+            num = int(token)
+        except ValueError:
+            continue
+        idx = num - 1
+        if 0 <= idx < max_count and idx not in seen:
+            seen.add(idx)
+            result.append(idx)
+    result.sort()
+    return result
+
+
+def collect_records_for_preview(
+    body: Dict[str, Any],
+    *,
+    workspace_path: Optional[str] = None,
+    fetcher=fetch_json,
+    per_page: int = 25,
+) -> list[Dict[str, Any]]:
+    """Search OpenAlex, enrich with CrossRef, dedupe, save records to workspace.
+
+    Returns the deduplicated record list.
+    """
+    topic = str(body.get("topic") or "")
+    records = search_openalex(topic, per_page=per_page, fetcher=fetcher) if topic else []
+    records = enrich_missing_abstracts_with_crossref(records, fetcher=fetcher)
+    records = dedupe_records(records)
+
+    if workspace_path:
+        records_path = Path(workspace_path) / PREVIEW_RECORDS_FILE
+        records_path.parent.mkdir(parents=True, exist_ok=True)
+        records_path.write_text(json.dumps(records, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    return records
+
+
+def export_selected_to_zotero(
+    workspace_path: str,
+    selection: list[int],
+    *,
+    zotero: Optional[Any] = None,
+    collection_path: str = "deep-research/selected",
+) -> Dict[str, Any]:
+    """Load saved records from workspace, filter by selection, register to Zotero.
+
+    If selection is empty or no records file exists, returns a skip result.
+    """
+    workspace = Path(workspace_path) if workspace_path else Path.cwd()
+    records_path = workspace / PREVIEW_RECORDS_FILE
+    if not records_path.exists():
+        return {
+            "status": "skipped",
+            "reason": f"records file not found at {records_path}",
+            "collection_path": collection_path,
+            "selected": 0,
+            "total": 0,
+        }
+
+    all_records = json.loads(records_path.read_text(encoding="utf-8"))
+    if not selection:
+        # Zotero collection creation is still useful: creates empty folder
+        if zotero:
+            ensure_collection_path(zotero, collection_path)
+        return {
+            "status": "skipped",
+            "reason": "no records selected for export",
+            "collection_path": collection_path,
+            "selected": 0,
+            "total": len(all_records),
+        }
+
+    selected_records = [all_records[i] for i in selection if 0 <= i < len(all_records)]
+    zotero = zotero or load_zotero_client()
+    zotero_result = register_records_to_zotero(selected_records, zotero, collection_path)
+
+    result = {
+        "status": "completed",
+        "collection_path": collection_path,
+        "collection_key": zotero_result["collection_key"],
+        "selected": len(selected_records),
+        "total": len(all_records),
+        "attempted": zotero_result["attempted"],
+        "created": zotero_result["created"],
+    }
+
+    export_path = workspace / ZOTERO_EXPORT_FILE
+    export_path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return result
+
+
+# =========================================================================
+# Backward-compatible one-shot acquisition (for CLI use)
+# =========================================================================
 
 
 def run_literature_acquisition(
