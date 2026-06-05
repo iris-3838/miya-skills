@@ -1,0 +1,334 @@
+#!/usr/bin/env python3
+"""ARS Kanban phase worker.
+
+This module is intentionally small and testable. The default CLI adapters use
+Hermes Kanban CLI commands, while tests inject fake kanban/delegator objects.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any, Dict, Iterable, Optional
+
+HERMES = "/opt/hermes/bin/hermes"
+
+# Ensure sibling modules (passport_layer, kb_sync, socratic_phase) are importable
+_SCRIPTS_DIR = str(Path(__file__).resolve().parent)
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+
+# Import passport layer (Phase 5) — optional; worker works without it
+try:
+    import passport_layer as pp  # type: ignore[import-untyped]
+except ImportError:
+    pp = None  # type: ignore[assignment]
+
+
+PHASE_SPECS: Dict[int, Dict[str, Any]] = {
+    1: {
+        "name": "Scoping",
+        "agents": [
+            "research_question_agent",
+            "research_architect_agent",
+            "devils_advocate_agent",
+        ],
+        "skills": ["deep-research"],
+    },
+    2: {
+        "name": "Investigation",
+        "agents": ["bibliography_agent", "source_verification_agent"],
+        "skills": ["deep-research"],
+    },
+    3: {
+        "name": "Analysis",
+        "agents": ["synthesis_agent", "devils_advocate_agent"],
+        "skills": ["deep-research"],
+    },
+    4: {
+        "name": "Composition",
+        "agents": ["report_compiler_agent"],
+        "skills": ["deep-research"],
+    },
+    5: {
+        "name": "Review",
+        "agents": ["editor_in_chief_agent", "ethics_review_agent", "devils_advocate_agent"],
+        "skills": ["academic-paper-reviewer", "deep-research"],
+    },
+    6: {
+        "name": "Revision",
+        "agents": ["report_compiler_agent"],
+        "skills": ["deep-research", "academic-paper"],
+    },
+}
+
+
+def extract_task_body(context_text: str) -> Dict[str, Any]:
+    """Extract and parse the JSON body from `hermes kanban context` output."""
+    marker = "## Body"
+    start = context_text.find(marker)
+    if start < 0:
+        raise ValueError("Body section not found in kanban context")
+    body_start = start + len(marker)
+    rest = context_text[body_start:].lstrip("\n")
+    next_section = rest.find("\n## ")
+    body_text = rest[:next_section].strip() if next_section >= 0 else rest.strip()
+    if not body_text:
+        raise ValueError("Body section is empty")
+    try:
+        parsed = json.loads(body_text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Body section is not valid JSON: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError("Body JSON must be an object")
+    return parsed
+
+
+def phase_spec(phase: int) -> Dict[str, Any]:
+    """Return the configured ARS phase spec."""
+    try:
+        return PHASE_SPECS[int(phase)]
+    except (KeyError, ValueError) as exc:
+        raise ValueError(f"Unsupported ARS phase: {phase!r}") from exc
+
+
+def extract_workspace_path(context_text: str) -> Optional[str]:
+    """Extract workspace path from `Workspace: <kind> @ <path>` line."""
+    for line in context_text.splitlines():
+        if not line.startswith("Workspace:") or " @ " not in line:
+            continue
+        path = line.split(" @ ", 1)[1].strip()
+        if path and path != "(unresolved)":
+            return path
+    return None
+
+
+def write_phase_result(workspace_path: str, payload: Dict[str, Any]) -> str:
+    """Write phase_result.json to workspace and return the file path."""
+    path = Path(workspace_path) / "phase_result.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return str(path)
+
+
+def build_phase_goal(task_id: str, phase: int, spec: Dict[str, Any], mode: str) -> str:
+    return f"Run ARS Phase {phase} ({spec['name']}) for kanban task {task_id} in {mode} mode"
+
+
+def build_phase_context(task_id: str, phase: int, mode: str, spec: Dict[str, Any], kanban_context: str) -> str:
+    agents = ", ".join(spec["agents"])
+    skills = ", ".join(spec["skills"])
+    return (
+        f"You are executing ARS Phase {phase}: {spec['name']}.\n"
+        f"Mode: {mode}\n"
+        f"Required agents: {agents}\n"
+        f"Relevant skills: {skills}\n\n"
+        "Use the kanban context below as the authoritative handoff from upstream phases. "
+        "Produce a concise structured result with a summary and artifacts.\n\n"
+        f"KANBAN TASK ID: {task_id}\n\n"
+        f"KANBAN CONTEXT:\n{kanban_context}"
+    )
+
+
+class KanbanCli:
+    def __init__(self, board: Optional[str] = None, hermes: str = HERMES):
+        self.board = board
+        self.hermes = hermes
+
+    def _cmd(self, *args: str) -> list[str]:
+        cmd = [self.hermes, "kanban"]
+        if self.board:
+            cmd.extend(["--board", self.board])
+        cmd.extend(args)
+        return cmd
+
+    def context(self, task_id: str) -> str:
+        return subprocess.run(self._cmd("context", task_id), check=True, capture_output=True, text=True).stdout
+
+    def complete(self, task_id: str, summary: str, metadata: Dict[str, Any]) -> None:
+        subprocess.run(
+            self._cmd("complete", task_id, "--summary", summary, "--metadata", json.dumps(metadata, ensure_ascii=False)),
+            check=True,
+        )
+
+    def block(self, task_id: str, reason: str) -> None:
+        subprocess.run(self._cmd("block", task_id, reason), check=True)
+
+    def comment(self, task_id: str, body: str) -> None:
+        subprocess.run(self._cmd("comment", task_id, "--body", body), check=True)
+
+
+class DryRunDelegator:
+    def run(self, goal: str, context: str, toolsets: Iterable[str]) -> Dict[str, Any]:
+        return {
+            "summary": f"dry-run: {goal}",
+            "artifacts": {
+                "mode": "dry-run",
+                "toolsets": list(toolsets),
+                "context_excerpt": context[:500],
+            },
+        }
+
+
+class HermesCliDelegator:
+    def __init__(self, hermes: str = HERMES):
+        self.hermes = hermes
+
+    def run(self, goal: str, context: str, toolsets: Iterable[str]) -> Dict[str, Any]:
+        # CLI fallback: run a fresh Hermes chat with the phase prompt. In agent
+        # sessions, tests can inject a delegator backed by delegate_task instead.
+        prompt = f"{goal}\n\n{context}\n\nReturn JSON with keys: summary, artifacts."
+        proc = subprocess.run(
+            [self.hermes, "chat", "-q", prompt, "--skills", "deep-research"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return {"summary": proc.stdout.strip() or goal, "artifacts": {}}
+
+
+def run_phase_task(task_id: str, *, kanban: Any, delegator: Any) -> Dict[str, Any]:
+    """Run one ARS phase task, completing or blocking the kanban card."""
+    kanban_context = kanban.context(task_id)
+    body = extract_task_body(kanban_context)
+    phase = int(body.get("phase", 0))
+    mode = str(body.get("mode", "full"))
+    spec = phase_spec(phase)
+
+    # Extract workspace path once and reuse
+    workspace_path = extract_workspace_path(kanban_context)
+
+    # Phase 1 Socratic mode: interactive dialogue via block/unblock
+    socratic_converged = False
+    summary = None
+    artifacts = None
+    if mode == "socratic" and phase == 1:
+        from socratic_phase import run_socratic_phase  # type: ignore[import-untyped]
+
+        soc_result = run_socratic_phase(
+            task_id,
+            kanban=kanban,
+            delegator=delegator,
+            body=body,
+            workspace_path=workspace_path,
+        )
+        if soc_result.get("status") == "converged":
+            # Socratic dialogue complete — skip delegate_task, go to completion
+            socratic_converged = True
+            mode = "socratic"
+            summary = soc_result["summary"]
+            artifacts = soc_result.get("artifacts", {})
+        else:
+            # Blocked — return early, don't complete
+            return soc_result
+
+    if not socratic_converged:
+        # Standard phase: build goal and context, run delegate
+        goal = build_phase_goal(task_id, phase, spec, mode)
+        delegate_context = build_phase_context(task_id, phase, mode, spec, kanban_context)
+
+    # Phase 5: Validate Material Passport before execution (non-blocking)
+    passport = body.get("material_passport")
+    if pp is not None and passport:
+        violations = pp.validate_passport(passport, strict=False)
+        if violations:
+            kanban.comment(
+                task_id,
+                f"Passport validation warnings ({len(violations)}):\n"
+                + "\n".join(violations),
+            )
+
+    if not socratic_converged:
+        try:
+            result = delegator.run(goal=goal, context=delegate_context, toolsets=["file", "web", "terminal"])
+        except Exception as exc:  # noqa: BLE001 - surfaced to kanban block
+            message = f"phase-worker failed: {exc}"
+            kanban.comment(task_id, f"Phase worker error for task {task_id}: {exc}")
+            kanban.block(task_id, message)
+            return {"status": "blocked", "error": str(exc), "phase": phase}
+
+        summary = str(result.get("summary") or f"Phase {phase} complete")
+        artifacts = result.get("artifacts") or {}
+    else:
+        # Socratic converged: summary and artifacts already set
+        pass
+    phase_result = {
+        "task_id": task_id,
+        "phase": phase,
+        "mode": mode,
+        "summary": summary,
+        "artifacts": artifacts,
+    }
+    result_path = write_phase_result(workspace_path, phase_result) if workspace_path else None
+    metadata: Dict[str, Any] = {"phase": phase, "mode": mode, "artifacts": artifacts}
+
+    # Phase 5: Upgrade passport with execution result
+    if pp is not None and passport:
+        version_label = pp.PHASE_VERSION_LABELS.get(phase, f"phase{phase}-v0")
+        upstream_label = pp.PHASE_VERSION_LABELS.get(phase - 1) if phase > 1 else None
+        upgraded = pp.upgrade_passport(
+            passport,
+            new_status="UNVERIFIED",
+            new_version_suffix=version_label,
+            downstream_dependency=upstream_label,
+        )
+        # content_hash covers the delegate result (summary + artifacts only, not all workspace files)
+        upgraded["content_hash"] = pp.compute_content_hash(
+            {"summary": summary, "artifacts": artifacts}
+        )
+        metadata["material_passport"] = upgraded
+        # Write passport.json to workspace for cross-phase reference
+        if workspace_path:
+            passport_path = Path(workspace_path) / "passport.json"
+            passport_path.write_text(
+                json.dumps(upgraded, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+    else:
+        # Include an empty passport marker so downstream phases can distinguish
+        # "intentionally empty" from "pre-upgrade" state
+        metadata.setdefault("material_passport", {})
+
+    # Phase 6: Save to llm-kb wiki (best-effort, does not block phase completion)
+    topic = body.get("topic", "")
+    phase_name = spec["name"]
+    try:
+        from kb_sync import save_and_push as _kb_save  # type: ignore[import-untyped]
+
+        kb_result = _kb_save(
+            topic=topic,
+            phase=phase,
+            phase_name=phase_name,
+            summary=summary,
+            artifacts=artifacts,
+            workspace_path=workspace_path,
+            skip_push=True,
+        )
+        if kb_result.get("kb_path"):
+            metadata["kb_path"] = kb_result["kb_path"]
+        else:
+            kanban.comment(task_id, f"KB sync skipped: KB directory not available for topic {topic!r}")
+    except Exception as exc:
+        kanban.comment(task_id, f"KB sync failed for task {task_id}: {exc}")
+
+    kanban.complete(task_id, summary, metadata)
+    return {"status": "completed", "phase": phase, "summary": summary, "metadata": metadata}
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description="Run an ARS kanban phase task")
+    parser.add_argument("task_id")
+    parser.add_argument("--board", default=None)
+    parser.add_argument("--dry-run", action="store_true", help="Use a deterministic local delegator instead of spawning Hermes chat")
+    args = parser.parse_args(argv)
+    delegator = DryRunDelegator() if args.dry_run else HermesCliDelegator()
+    result = run_phase_task(args.task_id, kanban=KanbanCli(board=args.board), delegator=delegator)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0 if result.get("status") == "completed" else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
