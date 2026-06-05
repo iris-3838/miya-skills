@@ -9,7 +9,7 @@ Manage your Zotero library through the Web API using Python scripts. Handles col
 
 ## Authentication
 
-Credentials are stored in `/workspace/.private/zotero_credentials.json` (outside the git-tracked skills dir):
+Credentials are stored in `/opt/data/workspace/.skills/zotero_credentials.json` (outside the git-tracked skills dir):
 
 ```json
 {"user_id": "123456", "api_key": "P9NiFoyLeZu2bZNvvuQPDWsd"}
@@ -17,7 +17,7 @@ Credentials are stored in `/workspace/.private/zotero_credentials.json` (outside
 
 **Setup first run:**
 ```bash
-python3 /workspace/skills/research/zotero/scripts/setup_credentials.py
+python3 /opt/data/workspace/skills/research/zotero/scripts/setup_credentials.py
 ```
 
 The script verifies the API key against the `/keys/current` endpoint and saves the file with `chmod 600` (owner-only read).
@@ -45,7 +45,7 @@ All operations via `zotero_client.py`:
 | Library stats | `python3 scripts/zotero_client.py info` |
 | List tags | `python3 scripts/zotero_client.py tags` |
 
-(All paths relative to `/workspace/skills/research/zotero/scripts/`)
+(All paths relative to `/opt/data/workspace/skills/research/zotero/scripts/`)
 
 ## Collection Hierarchy Management
 
@@ -54,10 +54,10 @@ Zotero supports nested collections via the `parentCollection` field. The skill s
 ### Moving collections between folders
 ```bash
 # Move collection to another parent
-python3 /workspace/skills/research/zotero/scripts/zotero_client.py collection-move ABCDEF --to XYZ123
+python3 /opt/data/workspace/skills/research/zotero/scripts/zotero_client.py collection-move ABCDEF --to XYZ123
 
 # Promote to top-level (remove parent)
-python3 /workspace/skills/research/zotero/scripts/zotero_client.py collection-move ABCDEF --to root
+python3 /opt/data/workspace/skills/research/zotero/scripts/zotero_client.py collection-move ABCDEF --to root
 ```
 
 ### Reorganizing folder structure
@@ -75,7 +75,7 @@ For complex item creation (e.g., from literature search results), use pyzotero d
 from pyzotero.zotero import Zotero
 import json
 
-creds = json.loads(open("/workspace/.private/zotero_credentials.json").read())
+creds = json.loads(open("/opt/data/workspace/.skills/zotero_credentials.json").read())
 z = Zotero(creds["user_id"], "user", creds["api_key"])
 
 template = z.item_template("journalArticle")
@@ -97,16 +97,16 @@ Mirror Zotero's collection hierarchy into `raw/papers/zotero/` as Markdown files
 
 ```bash
 # Dry-run (show structure, no writes)
-python3 /workspace/skills/research/zotero/scripts/zotero_kb_sync.py --dry-run
+python3 /opt/data/workspace/skills/research/zotero/scripts/zotero_kb_sync.py --dry-run
 
 # Execute sync (creates directory tree + item .md files + index.md per collection)
-python3 /workspace/skills/research/zotero/scripts/zotero_kb_sync.py
+python3 /opt/data/workspace/skills/research/zotero/scripts/zotero_kb_sync.py
 
 # Sync a single collection only
-python3 /workspace/skills/research/zotero/scripts/zotero_kb_sync.py --collection COLLECTION_KEY
+python3 /opt/data/workspace/skills/research/zotero/scripts/zotero_kb_sync.py --collection COLLECTION_KEY
 
 # Sync a group library (read-only)
-python3 /workspace/skills/research/zotero/scripts/zotero_kb_sync.py --group GROUP_ID
+python3 /opt/data/workspace/skills/research/zotero/scripts/zotero_kb_sync.py --group GROUP_ID
 ```
 
 **What it produces:**
@@ -123,7 +123,7 @@ raw/papers/zotero/
 
 **Cron setup for periodic sync:**
 ```bash
-python3 /workspace/skills/research/zotero/scripts/zotero_kb_sync.py
+python3 /opt/data/workspace/skills/research/zotero/scripts/zotero_kb_sync.py
 # Schedule via: hermes cron create --schedule "0 6 * * 1" --prompt "Run zotero_kb_sync.py"
 ```
 
@@ -134,7 +134,7 @@ Zotero group libraries use a different library type parameter:
 from pyzotero.zotero import Zotero
 import json
 
-creds = json.loads(open("/workspace/.private/zotero_credentials.json").read())
+creds = json.loads(open("/opt/data/workspace/.skills/zotero_credentials.json").read())
 
 # User library
 z_user = Zotero(creds["user_id"], "user", creds["api_key"])
@@ -148,7 +148,7 @@ CLI equivalent: `python3 scripts/zotero_kb_sync.py --group 5643674`
 
 ## Credential Management
 
-API credentials are stored in `/workspace/.private/` (outside git-tracked dirs), not in SKILL.md:
+API credentials are stored in `/opt/data/workspace/.skills/` (outside git-tracked dirs), not in SKILL.md:
 - **Format**: JSON (`zotero_credentials.json`)
 - **Permissions**: `chmod 600` (owner-only)
 - **Setup**: `python3 scripts/setup_credentials.py` (interactive, auto-verifies key)
@@ -160,7 +160,7 @@ Zotero attachments can be in several states — some reports "have files" but th
 ### Check attachment types and availability
 
 ```bash
-python3 /workspace/skills/research/zotero/scripts/check_attachments.py
+python3 /opt/data/workspace/skills/research/zotero/scripts/check_attachments.py
 ```
 
 This reports:
@@ -171,7 +171,7 @@ This reports:
 For a detailed breakdown by link mode:
 
 ```bash
-python3 /workspace/skills/research/zotero/scripts/check_attachments_detail.py
+python3 /opt/data/workspace/skills/research/zotero/scripts/check_attachments_detail.py
 ```
 
 This separates attachments into:
@@ -206,10 +206,10 @@ Scanning children of 800+ parent items via individual `GET /items/{key}/children
 Before any reorganization, save the current structure:
 
 ```bash
-python3 /workspace/skills/research/zotero/scripts/backup_structure.py
+python3 /opt/data/workspace/skills/research/zotero/scripts/backup_structure.py
 ```
 
-This writes to `/workspace/llm-kb.miya-lis.net/raw/papers/zotero/_bak/`:
+This writes to `/opt/data/workspace/llm-kb.miya-lis.net/raw/papers/zotero/_bak/`:
 - `collection_structure.md` — tree view of all 213+ collections
 - `collections.json` — JSON dump of all collections with keys, names, parent refs
 
@@ -250,7 +250,7 @@ See `references/bulk-restore-from-trash.md` for the complete workflow to restore
 ```python
 import json, requests
 
-with open("/workspace/.private/zotero_credentials.json") as f:
+with open("/opt/data/workspace/.skills/zotero_credentials.json") as f:
     creds = json.load(f)
 
 headers = {"Zotero-API-Version": "3", "Zotero-API-Key": creds["api_key"]}
@@ -280,7 +280,7 @@ while True:
 from pyzotero.zotero import Zotero
 import json
 
-creds = json.load(open("/workspace/.private/zotero_credentials.json"))
+creds = json.load(open("/opt/data/workspace/.skills/zotero_credentials.json"))
 z = Zotero(creds["user_id"], "user", creds["api_key"])
 z.add_parameters(limit=100)
 
@@ -340,7 +340,7 @@ pyzoteroの `addto_collection` も内部的には1アイテムずつPATCHして�
 **Detection method:**
 ```bash
 # 1. List flat to see all collections with parent refs
-python3 /workspace/skills/research/zotero/scripts/zotero_client.py collections --flat
+python3 /opt/data/workspace/skills/research/zotero/scripts/zotero_client.py collections --flat
 
 # 2. Look for [parent=KEY] where KEY does not appear as its own line
 #    Those are orphans — the parent no longer exists.
@@ -351,7 +351,7 @@ python3 /workspace/skills/research/zotero/scripts/zotero_client.py collections -
 from pyzotero.zotero import Zotero
 import json
 
-creds = json.load(open("/workspace/.private/zotero_credentials.json"))
+creds = json.load(open("/opt/data/workspace/.skills/zotero_credentials.json"))
 z = Zotero(creds["user_id"], "user", creds["api_key"])
 
 cols = z.collections()
@@ -374,10 +374,10 @@ for k, v in sorted(by_key.items()):
 **Fixing orphans:**
 ```bash
 # Promote to root level (removes parent reference)
-python3 /workspace/skills/research/zotero/scripts/zotero_client.py collection-move KEY --to root
+python3 /opt/data/workspace/skills/research/zotero/scripts/zotero_client.py collection-move KEY --to root
 
 # Or reparent to a specific parent
-python3 /workspace/skills/research/zotero/scripts/zotero_client.py collection-move KEY --to PARENT_KEY
+python3 /opt/data/workspace/skills/research/zotero/scripts/zotero_client.py collection-move KEY --to PARENT_KEY
 ```
 
 **Caveat:** The backup script (`backup_structure.py`) captures all collections including orphans, so review a fresh backup before any restructuring to understand the full picture.
@@ -389,7 +389,7 @@ For large-scale reorganization (hundreds of collections), `zotero_client.py coll
 ```python
 import json, requests
 
-with open("/workspace/.private/zotero_credentials.json") as f:
+with open("/opt/data/workspace/.skills/zotero_credentials.json") as f:
     creds = json.load(f)
 
 headers = {
@@ -548,7 +548,7 @@ seimiya manages items using three status tags instead of manual collection place
 ```python
 import json, requests
 
-creds = json.load(open("/workspace/.private/zotero_credentials.json"))
+creds = json.load(open("/opt/data/workspace/.skills/zotero_credentials.json"))
 headers = {"Zotero-API-Version": "3", "Zotero-API-Key": creds["api_key"]}
 base = f"https://api.zotero.org/users/{creds['user_id']}"
 
@@ -589,7 +589,7 @@ while True:
 ```python
 import json, requests
 
-creds = json.load(open("/workspace/.private/zotero_credentials.json"))
+creds = json.load(open("/opt/data/workspace/.skills/zotero_credentials.json"))
 headers = {"Zotero-API-Version": "3", "Zotero-API-Key": creds["api_key"]}
 base = f"https://api.zotero.org/users/{creds['user_id']}"
 

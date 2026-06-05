@@ -17,7 +17,7 @@ Run `structure` — if the total collection count is much higher than what the t
 ### Step 2: Confirm via flat listing
 
 ```bash
-python3 /workspace/skills/research/zotero/scripts/zotero_client.py collections --flat
+python3 /opt/data/workspace/skills/research/zotero/scripts/zotero_client.py collections --flat
 ```
 
 Lines with `[parent=KEY]` where KEY doesn't appear as its own entry are orphans.
@@ -28,7 +28,7 @@ Lines with `[parent=KEY]` where KEY doesn't appear as its own entry are orphans.
 from pyzotero.zotero import Zotero
 import json
 
-creds = json.load(open("/workspace/.private/zotero_credentials.json"))
+creds = json.load(open("/opt/data/workspace/.skills/zotero_credentials.json"))
 z = Zotero(creds["user_id"], "user", creds["api_key"])
 
 cols = z.collections()
@@ -56,7 +56,7 @@ print(f"\nTotal orphans: {len(orphans)}")
 ### Step 4: Backup before fixing
 
 ```bash
-python3 /workspace/skills/research/zotero/scripts/backup_structure.py
+python3 /opt/data/workspace/skills/research/zotero/scripts/backup_structure.py
 ```
 
 ## Repair
@@ -65,15 +65,15 @@ python3 /workspace/skills/research/zotero/scripts/backup_structure.py
 
 ```bash
 # One at a time
-python3 /workspace/skills/research/zotero/scripts/zotero_client.py collection-move KEY --to root
+python3 /opt/data/workspace/skills/research/zotero/scripts/zotero_client.py collection-move KEY --to root
 ```
 
 ### Option B: Reparent under a new parent
 
 Create a new parent collection first, then move:
 ```bash
-python3 /workspace/skills/research/zotero/scripts/zotero_client.py collection-create "New Parent"
-python3 /workspace/skills/research/zotero/scripts/zotero_client.py collection-move ORPHAN_KEY --to NEW_PARENT_KEY
+python3 /opt/data/workspace/skills/research/zotero/scripts/zotero_client.py collection-create "New Parent"
+python3 /opt/data/workspace/skills/research/zotero/scripts/zotero_client.py collection-move ORPHAN_KEY --to NEW_PARENT_KEY
 ```
 
 ### Option C: Bulk reparent (Python)
@@ -82,7 +82,7 @@ python3 /workspace/skills/research/zotero/scripts/zotero_client.py collection-mo
 from pyzotero.zotero import Zotero
 import json
 
-creds = json.load(open("/workspace/.private/zotero_credentials.json"))
+creds = json.load(open("/opt/data/workspace/.skills/zotero_credentials.json"))
 z = Zotero(creds["user_id"], "user", creds["api_key"])
 
 # Create target parent first in Zotero UI, get its key

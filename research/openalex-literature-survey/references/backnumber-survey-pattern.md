@@ -159,7 +159,7 @@ The Monday job `LIS Venues Weekly Collection` collects the most recent 2 weeks' 
 ## llm-kb Location
 
 ```
-/workspace/llm-kb.miya-lis.net/concepts/lis-journal-surveys/
+/opt/data/workspace/llm-kb.miya-lis.net/concepts/lis-journal-surveys/
   ├── weekly-20260525.md                   # Monday weekly collection
   ├── jdoc-2000.md                         # Tuesday backnumber
   ├── jasist-2000.md                       # Wednesday backnumber

@@ -4,7 +4,7 @@ from pyzotero.zotero import Zotero
 from pathlib import Path
 import json
 
-creds = json.loads(Path("/workspace/.private/zotero_credentials.json").read_text())
+creds = json.loads(Path("/opt/data/workspace/.skills/zotero_credentials.json").read_text())
 z = Zotero(creds["user_id"], "user", creds["api_key"])
 
 # Fetch ALL collections

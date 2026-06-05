@@ -290,7 +290,7 @@ Each job is LLM-driven (not `no_agent`) with `llm-kb-wiki` skill loaded. The age
      --year-start {year} --year-end {year} --all-papers --json
    ```
 3. **Read & describe:** Read the generated report file. For every paper, extract what it does from the abstract and write a **neutral, factual summary** in Japanese. No thematic categorisation, no interpretation.
-4. **Save to llm-kb:** `/workspace/llm-kb.miya-lis.net/concepts/lis-journal-surveys/{journal}-{year}.md`.
+4. **Save to llm-kb:** `/opt/data/workspace/llm-kb.miya-lis.net/concepts/lis-journal-surveys/{journal}-{year}.md`.
    Update `index.md` and `log.md`.
 5. **Update state:** Increment `current_year`. If `> 2026`, set `status: "complete"`.
 

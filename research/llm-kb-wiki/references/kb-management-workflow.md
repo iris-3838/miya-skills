@@ -16,7 +16,7 @@ tags: [workflow, kb-management, conventions]
 | カテゴリ | ツール | インストール | 用途 |
 |---------|--------|-------------|------|
 | テキスト抽出（汎用） | markitdown | `pip install "markitdown[pdf]"` | テキストPDF→MD（常に最初） |
-| 日本語OCR | ndlocr-lite | `/workspace/ndlocr-lite/` (git clone) | 日本語スキャンPDF |
+| 日本語OCR | ndlocr-lite | `/opt/data/workspace/ndlocr-lite/` (git clone) | 日本語スキャンPDF |
 | 重量級OCR | marker-pdf | `pip install marker-pdf` | 複雑レイアウト・数式 |
 | PDF操作 | pymupdf | `pip install pymupdf` | 画像化・分割・テキスト有無確認 |
 | ブラウザ抽出 | web_extract | 内蔵ツール | URLからのMD変換 |

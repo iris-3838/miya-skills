@@ -13,7 +13,7 @@ metadata:
 
 # ziten — 統一RAGシステム
 
-`/workspace/ziten/` にある共通ライブラリを軸に、**3つのデータセット（lisdict / ieko / d2l）** を統一的な形式で索引・検索するシステム。
+`/opt/data/workspace/ziten/` にある共通ライブラリを軸に、**3つのデータセット（lisdict / ieko / d2l）** を統一的な形式で索引・検索するシステム。
 
 ## 起動条件（このスキルを使うとき）
 
@@ -26,7 +26,7 @@ metadata:
 ## 全体構成
 
 ```
-/workspace/
+/opt/data/workspace/
 ├── lisdict/                  # 図書館情報学辞典 ✅ ziten化済
 │   ├── build.py              #   ziten使用
 │   ├── query.py              #   CLI検索（388行, ziten.search使用）
@@ -61,7 +61,7 @@ zitenは3種類のエントリタイプをサポート:
 
 ## 統一CLI: `rag`
 
-インストール先: `~/.local/bin/rag` → `/workspace/rag/query.py`（詳細は `references/unified-cli.md`）
+インストール先: `~/.local/bin/rag` → `/opt/data/workspace/rag/query.py`（詳細は `references/unified-cli.md`）
 
 ```bash
 rag "RDA"                              # lisdict（default）
@@ -91,7 +91,7 @@ rag "RDA" -n 3                         # 3件表示
 
 ```bash
 # 検索
-cd /workspace/lisdict
+cd /opt/data/workspace/lisdict
 python query.py "RDA"                   # ハイブリッド検索
 python query.py "RDA" --expand          # グラフ展開付き
 python query.py "RDA" --llm             # LLM回答生成
@@ -113,7 +113,7 @@ ls index/                               # index.faiss bm25.pkl meta.pkl embedder
 ### d2l（Dive into Deep Learning）— ✅ ziten化完了
 
 ```bash
-cd /workspace/d2l
+cd /opt/data/workspace/d2l
 python query.py "attention mechanism" -n 5
 python build.py --force
 rag "CNN architecture" -c d2l
@@ -122,7 +122,7 @@ rag "CNN architecture" -c d2l
 ### ieko（ISKO Encyclopedia）— ✅ ziten化完了
 
 ```bash
-cd /workspace/ieko
+cd /opt/data/workspace/ieko
 python query.py "faceted classification"    # ハイブリッド検索（FAISS+BM25）
 python query.py "Classification" --expand   # グラフ展開付き（133 nodes / 3391 edges）
 python query.py --graph "Classification"    # 特定エントリのグラフ詳細
@@ -252,7 +252,7 @@ rag "RDAとAACR2" -a   → エージェンティックで比較
 
 ### 参照関係の探索
 ```
-cd /workspace/lisdict && python query.py "目録規則" --expand --depth 2
+cd /opt/data/workspace/lisdict && python query.py "目録規則" --expand --depth 2
 ```
 
 ### 論文の引用用定義

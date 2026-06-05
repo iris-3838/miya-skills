@@ -18,7 +18,7 @@ Working pattern for restructuring large Zotero libraries (200+ collections).
 ```python
 import json, requests
 
-with open("/workspace/.private/zotero_credentials.json") as f:
+with open("/opt/data/workspace/.skills/zotero_credentials.json") as f:
     creds = json.load(f)
 
 headers = {

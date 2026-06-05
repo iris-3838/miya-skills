@@ -15,8 +15,8 @@ Output sections:
   - 同一店舗・金額違い: Price/plan change candidates
 
 Usage:
-    source /workspace/.zaim_env
-    python3 /workspace/find_all_subscriptions.py
+    source /opt/data/workspace/.zaim_env
+    python3 /opt/data/workspace/find_all_subscriptions.py
 
 Requires: local SQLite cache at ~/.zaim_cache/zaim.db (populated by zaim.py sync)
 """

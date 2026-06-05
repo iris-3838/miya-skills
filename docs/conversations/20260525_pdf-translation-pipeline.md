@@ -340,7 +340,7 @@ _(ツール: execute_code, terminal, todo)_
 >
 > [IMPORTANT: Background process proc_c9b7d34cdad8 completed (exit code 0).
 Command: export PATH="/opt/data/home/.local/bin:$PATH"
-API_KEY=$(python3 -c "import json; print(json.load(open('/workspace/.private/opencode_api.json'))['api_key'])")
+API_KEY=$(python3 -c "import json; print(json.load(open('/opt/data/workspace/.skills/opencode_api.json'))['api_key'])")
 pdf2zh_next /tmp/neutral_monism.pdf \
   --openaicompatible \
   --openai-compatible-base-url https://opencode.ai/zen/go/v1 \

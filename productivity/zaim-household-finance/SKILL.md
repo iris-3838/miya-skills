@@ -62,13 +62,13 @@ Base URL: `https://api.zaim.net/v2`
 
 **Python library**: Use `pip install zaim requests_oauthlib --break-system-packages` (user-site install, since root access unavailable). Also supports `ExtendedApi` with client-side search filtering.
 
-**OAuth Token Setup Script**: `/workspace/scripts/zaim/zaim_token_setup.py` — interactive script that walks through the OAuth 1.0a flow (request token → user authorization → access token). Run with `python3 /workspace/scripts/zaim/zaim_token_setup.py` and enter Consumer Key/Secret when prompted.
+**OAuth Token Setup Script**: `/opt/data/workspace/scripts/zaim/zaim_token_setup.py` — interactive script that walks through the OAuth 1.0a flow (request token → user authorization → access token). Run with `python3 /opt/data/workspace/scripts/zaim/zaim_token_setup.py` and enter Consumer Key/Secret when prompted.
 
 **Note**: The official API docs at dev.zaim.net require login — the overview page redirects to a login form. Publicly accessible: terms of service at `/portal/tos`. No other doc pages are public.
 
 ## Automatic Category Classification
 
-A store-name-based classifier (`/workspace/scripts/zaim/categorize_and_subs.py`) automatically assigns Zaim category/genre to uncategorized transactions. Supports 50+ Japanese stores/chains with category rules mapped to Zaim's official category IDs.
+A store-name-based classifier (`/opt/data/workspace/scripts/zaim/categorize_and_subs.py`) automatically assigns Zaim category/genre to uncategorized transactions. Supports 50+ Japanese stores/chains with category rules mapped to Zaim's official category IDs.
 
 ### Store Categories Supported
 
@@ -99,15 +99,15 @@ Rules are evaluated by keyword length (longest first) to prevent short keyword f
 
 ```bash
 # Dry run (preview only)
-source /workspace/.zaim_env
-python3 /workspace/scripts/zaim/categorize_and_subs.py --dry-run
+source /.skills/zaim.env
+python3 /opt/data/workspace/scripts/zaim/categorize_and_subs.py --dry-run
 
 # Full run (updates local DB + Zaim API)
-python3 /workspace/scripts/zaim/categorize_and_subs.py
+python3 /opt/data/workspace/scripts/zaim/categorize_and_subs.py
 
 # Subscription detection only
-source /workspace/.zaim_env
-python3 /workspace/scripts/zaim/categorize_and_subs.py --subscriptions-only
+source /.skills/zaim.env
+python3 /opt/data/workspace/scripts/zaim/categorize_and_subs.py --subscriptions-only
 ```
 
 Workflow:
@@ -146,9 +146,9 @@ _Actual amounts and services will vary. Run the subscription detection script on
 If a previous partial-PUT batch zeroed your transaction amounts, use the recovery script at `scripts/recover_amount.py` (skill directory):
 
 ```bash
-SKILL_SCRIPTS="/workspace/skills/productivity/zaim-household-finance/scripts"
+SKILL_SCRIPTS="/opt/data/workspace/skills/productivity/zaim-household-finance/scripts"
 
-source /workspace/.zaim_env
+source /.skills/zaim.env
 python3 "$SKILL_SCRIPTS/recover_amount.py" --dry-run  # preview
 python3 "$SKILL_SCRIPTS/recover_amount.py"             # fix
 ```
@@ -166,9 +166,9 @@ Analyzes ALL transaction history to identify recurring subscriptions across ever
 ### Subscription Detection Script
 
 ```bash
-SKILL_SCRIPTS="/workspace/skills/productivity/zaim-household-finance/scripts"
+SKILL_SCRIPTS="/opt/data/workspace/skills/productivity/zaim-household-finance/scripts"
 
-source /workspace/.zaim_env
+source /.skills/zaim.env
 python3 "$SKILL_SCRIPTS/find_all_subscriptions.py"
 ```
 
@@ -184,8 +184,8 @@ See `scripts/find_all_subscriptions.py` for the full analysis script and `refere
 The script `zaim.py` syncs all transaction history to a local SQLite cache at `~/.zaim_cache/zaim.db`:
 
 ```bash
-source /workspace/.zaim_env
-python3 /workspace/scripts/zaim/zaim.py sync
+source /.skills/zaim.env
+python3 /opt/data/workspace/scripts/zaim/zaim.py sync
 ```
 
 Schema (`transactions` table — via `sqlite3 ~/.zaim_cache/zaim.db`):
@@ -228,7 +228,7 @@ These are handled by the card statement import separately.
 ### Workflow
 ```bash
 # Step 1: Filter out card transactions from PayPay CSV
-python3 ~/workspace/scripts/zaim/filter_paypay_csv.py PayPay.csv -o PayPay_zaim.csv
+python3 ~/opt/data/workspace/scripts/zaim/filter_paypay_csv.py PayPay.csv -o PayPay_zaim.csv
 
 # Step 2: Import filtered CSV to Zaim via API
 # (see references/paypay-csv-import.md for full workflow)
@@ -347,10 +347,10 @@ The script connects to the local SQLite cache (`~/.zaim_cache/zaim.db`), finds t
 The script lives in this skill's `scripts/` directory:
 
 ```bash
-SKILL_SCRIPTS="/workspace/skills/productivity/zaim-household-finance/scripts"
+SKILL_SCRIPTS="/opt/data/workspace/skills/productivity/zaim-household-finance/scripts"
 
 # Step 0: Ensure local DB is up-to-date
-source /workspace/.zaim_env && python3 /workspace/scripts/zaim/zaim.py sync
+source /.skills/zaim.env && python3 /opt/data/workspace/scripts/zaim/zaim.py sync
 
 # Step 1: Preview duplicates
 python3 "$SKILL_SCRIPTS/delete_duplicates.py" --dry-run
@@ -378,10 +378,10 @@ When investigating duplicate transactions at scale:
 ### Verification After Deletion
 
 ```bash
-SKILL_SCRIPTS="/workspace/skills/productivity/zaim-household-finance/scripts"
+SKILL_SCRIPTS="/opt/data/workspace/skills/productivity/zaim-household-finance/scripts"
 
 # Re-sync local DB
-source /workspace/.zaim_env && python3 /workspace/scripts/zaim/zaim.py sync
+source /.skills/zaim.env && python3 /opt/data/workspace/scripts/zaim/zaim.py sync
 
 # Verify duplicate count dropped
 python3 "$SKILL_SCRIPTS/delete_duplicates.py" --dry-run
@@ -478,7 +478,7 @@ api.update(mode='payment', money_id=12345, amount=1500, comment='訂正')
 ## Pitfalls
 
 - **⚠ Public release audit**: Before pushing skill files to a public GitHub repo, run the security audit checklist in `references/pre-publication-audit.md`. This skill directory contains references to real transaction IDs, absolute paths, and credential patterns that must be sanitized before public exposure. The audit covers: hardcoded credentials, usernames, domain names, absolute paths, transaction IDs, and API endpoint references.
-- **⚠ Never hardcode API credentials in scripts**: `scripts/recover_amount.py` previously had Consumer Key, Consumer Secret, Access Token, and Access Token Secret hardcoded as Python string literals. This is a **security risk** — anyone with read access to the file can impersonate your Zaim account. Always store credentials in `/workspace/.zaim_credentials` and read them from environment variables (`os.environ[...]`). All scripts in this skill now follow this pattern — never revert to hardcoded values.
+- **⚠ Never hardcode API credentials in scripts**: `scripts/recover_amount.py` previously had Consumer Key, Consumer Secret, Access Token, and Access Token Secret hardcoded as Python string literals. This is a **security risk** — anyone with read access to the file can impersonate your Zaim account. Always store credentials in `/opt/data/workspace/.zaim_credentials` and read them from environment variables (`os.environ[...]`). All scripts in this skill now follow this pattern — never revert to hardcoded values.
 - **⚠ PUT overwrites ALL fields**: When calling `PUT /home/money/{mode}/{id}` with `requests.put()` directly, Zaim's API **resets any omitted field to its default** (amount → 0, name → blank). You MUST send the complete transaction payload including `amount`, `date`, `name`, `place`, `comment`, `from_account_id`, `to_account_id`, `currency_code` — not just the fields you're changing. The `zaim` Python library's `api.update()` handles this internally; only raw `requests.put()` calls need manual full-field construction.
 - **⚠ `api.money()` may return 401**: The `zaim` Python library's `api.money()` method can return HTTP 401 Unauthorized even when other methods (`api.account()`, `api.category()`, `api.payment()`) work fine with the same credentials. Cause is unclear — possibly the `mapping` parameter or a library bug. **Workaround**: Use raw `requests_oauthlib.OAuth1Session` to call `GET https://api.zaim.net/v2/home/money` directly (see Useful Python Patterns for the exact code pattern). This workaround is reliable for all filter combinations (mode, start_date, end_date, limit).
 - **⚠ Duplicate inflation skews analysis**: A significant portion of transactions may be duplicates (PayPay CSV × PayPayカード double registration). Always dedup by (date + amount + place) before any analysis — especially subscription detection, where duplicates make counts appear higher than reality.

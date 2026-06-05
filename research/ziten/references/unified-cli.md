@@ -2,23 +2,23 @@
 
 ## Architecture
 
-`~/.local/bin/rag` → `/workspace/rag/query.py` が統合CLIエントリポイント。
+`~/.local/bin/rag` → `/opt/data/workspace/rag/query.py` が統合CLIエントリポイント。
 各corpusの `query.py` を subprocess で呼び出すシンプルなディスパッチャ。
 
 ```python
 CORPORA = {
     'lis': {
-        'path': '/workspace/lisdict/query.py',
+        'path': '/opt/data/workspace/lisdict/query.py',
         'python': '/usr/bin/python3',
         'label': 'LIS辞書 図書館情報学辞典',
     },
     'ieko': {
-        'path': '/workspace/ieko/query.py',
+        'path': '/opt/data/workspace/ieko/query.py',
         'python': '/usr/bin/python3',
         'label': 'IEKO百科事典 (ISKO Cyclopedia)',
     },
     'd2l': {
-        'path': '/workspace/d2l/query.py',
+        'path': '/opt/data/workspace/d2l/query.py',
         'python': '/usr/bin/python3',
         'label': 'Dive into Deep Learning',
     },

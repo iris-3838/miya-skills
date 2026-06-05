@@ -396,6 +396,7 @@ tags = {t['id']: t['title'] for t in json.loads(terminal(f"curl -s {SP}/tags")['
 ## 関連リソース
 
 - **`references/cron-automation.md`** — SP タスク × Hermes cron job の自動化パターン（`no_agent=True` + Python スクリプト）。ポモドーロタイマー、タイムボックス、作業リマインダー向け。
+- **`references/academic-argument-validation.md`** — 学会発表準備 × Deep Research 定期検証 cron の統合パターン。理論的対立の検証を毎日自動実行し、SP タスクと連携する。
 - **`references/api-limitations.md`** — SP Local REST API の制限詳細（`/executeGlobalCommand` の動作確認結果、ルーティング制限のテスト記録）。
 - **`skill: pomo`** — ポモドーロタイマー実装。SP と統合済み。
 
@@ -471,14 +472,65 @@ except Exception as e:
 
 ## 注意点・既知の問題
 
+### dueDay 自動割り当て
+
+`POST /tasks` で `dueDay` を指定せずにタスクを作成すると、自動的に**本日日付**が `dueDay` にセットされる。この挙動は SP 側の仕様（明示されていない）。
+
+**対策:** 期限のないタスクを作成する場合は、必ず `"dueDay": null` を明示的に渡すこと。作成後に `PATCH /tasks/:id` で `{"dueDay": null}` を送ればクリア可能。
+
+```json
+// ✅ 推奨: 期限なしタスクは明示的に null を指定
+POST /tasks
+{"title": "タスク名", "projectId": "PROJECT_ID", "dueDay": null}
+
+// ❌ 期限なしなのに dueDay を省略すると今日付が入る
+POST /tasks
+{"title": "タスク名", "projectId": "PROJECT_ID"}
+// → dueDay: "YYYY-MM-DD" (今日) が自動セットされる
+```
+
+### タスク一覧表示の注意
+
+タスク一覧を表示する際、短縮表示で `projectId`（プロジェクトID）を表示すると、後続の操作でその値をタスクIDと誤認して `TASK_NOT_FOUND` エラーになる。タスクIDとプロジェクトIDを区別できる表示形式にすること。
+
+```bash
+# ✅ 良い例: taskId と title を明確に分ける
+curl -s "$SP/tasks?includeDone=false" | jq -r '.data[] | "\(.id[0:10])  ☐ \(.title)"'
+
+# ❌ 悪い例: projectId をタスクIDと誤認しやすい位置に表示
+"☐ タスク名 [projectId]"  # → この projectId で PATCH すると TASK_NOT_FOUND
+```
+
+### タスク分割提案ワークフロー
+
+ユーザーが複合的なタスク（学会発表準備など）の細分化を依頼してきた場合の推奨パターン:
+
+1. **現状把握**: 現在のアクティブタスク・プロジェクトを確認する
+2. **分割案の提案**: タスクを論理的に細分化し、見積もりや依存関係を含めて提案する
+3. **ユーザー承認待ち**: プロジェクト紐付け先、期限、優先度の確認を含める
+4. **一括作成**: 承認後、全タスクを `POST /tasks` で一括作成し、完了報告する
+
+```bash
+# バッチ作成例（ループ + 配列）
+TASKS=(
+  "サブタスク1"
+  "サブタスク2"
+)
+for TITLE in "${TASKS[@]}"; do
+  curl -s -X POST "$SP/tasks" \
+    -H "Content-Type: application/json" \
+    -d "{\"title\":\"$TITLE\",\"projectId\":\"$PROJECT_ID\",\"dueDay\":null}"
+done
+```
+
 - **Electron専用**: Web版やモバイル版では利用不可
 - **認証なし**: localhost限定のため認証なし。外部公開厳禁
 - **ポート固定**: 3876固定（v1では変更不可）
 - **タイムアウト**: レンダラー応答に15秒のタイムアウト
 - **リペアレンティング不可**: 既存タスクの親子関係変更は非対応。削除して再作成
 - **Dockerネットワーク**: `--network host` 必須。ブリッジネットワークだと到達不可
-- **`/executeGlobalCommand` 非対応**: `POST /executeGlobalCommand` に `{"name": "POMODORO_START"}` 等を送ると `{ok: true}` は返るが、実際のボタン押下は発生せず何も起きない。Pomodoro の開始/停止/リセットは REST API 経由では操作不可。SP のポモドーロを操作したい場合は `skill: pomo`（ローカルファイルベースのタイマースクリプト）を使用する。
-- **制限的ルーター**: SP Local REST API はホワイトリスト方式のルーティング。定義外のエンドポイントへの POST は `METHOD_NOT_FOUND` を返す。動的なコマンドディスパッチは行われない。
+- **`/executeGlobalCommand` 非対応**: `POST /executeGlobalCommand` に `{"name": "POMODORO_START"}` 等を送ると `{ok: true}` は返るが、実際のボタン押下は発生せず何も起きない。Pomodoro の開始/停止/リセットは REST API 経由では操作不可。**SP のポモドーロを操作したい場合は `skill: pomo`（`pomo-sp.py`）を使用する** — タスク名/IDを指定するとSPのタスクタイマーと連動し、作業時間が `timeSpent` / `timeSpentOnDay` に自動記録される。
+- **制限的ルーター**: SP Local REST API はホワitelist方式のルーティング。定義外のエンドポイントへの POST は `METHOD_NOT_FOUND` を返す。動的なコマンドディスパッチは行われない。
 - **タイムトラッキングの単位**: 時間系フィールドはすべて**ミリ秒**
 - **jq必須**: 上記の操作例は `jq` を前提としている
 - **ウォッチドッグスクリプトのサイレント障害**: `sp-task-watchdog.py` は SP に接続できない場合や空データを返された場合、何も出力せず `exit 0` で終了する。このためcronシステムには常に `ok` と記録され、障害に気づきにくい。stateファイルの更新日時が唯一の客観的指標。必ず上記「トラブルシューティング」セクションの診断手順で実効状態を確認すること。

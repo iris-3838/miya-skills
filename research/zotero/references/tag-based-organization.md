@@ -37,7 +37,7 @@ Before restoring trashed items, always check if any still have old collection li
 ```python
 import json, requests
 
-creds = json.load(open("/workspace/.private/zotero_credentials.json"))
+creds = json.load(open("/opt/data/workspace/.skills/zotero_credentials.json"))
 headers = {"Zotero-API-Version": "3", "Zotero-API-Key": creds["api_key"]}
 base = f"https://api.zotero.org/users/{creds['user_id']}"
 
@@ -74,7 +74,7 @@ while True:
 
 ```python
 import json, requests
-creds = json.load(open("/workspace/.private/zotero_credentials.json"))
+creds = json.load(open("/opt/data/workspace/.skills/zotero_credentials.json"))
 headers = {"Zotero-API-Version": "3", "Zotero-API-Key": creds["api_key"]}
 base = f"https://api.zotero.org/users/{creds['user_id']}"
 
@@ -102,7 +102,7 @@ After items are in Archive, assign additional tags beyond the status tag — sub
 # Change tag and move collection membership
 import json, requests
 
-creds = json.load(open("/workspace/.private/zotero_credentials.json"))
+creds = json.load(open("/opt/data/workspace/.skills/zotero_credentials.json"))
 headers = {"Zotero-API-Version": "3", "Zotero-API-Key": creds["api_key"]}
 base = f"https://api.zotero.org/users/{creds['user_id']}"
 

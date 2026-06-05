@@ -85,7 +85,7 @@ for i in range(len(doc)):
 2. **vision_analyze を使う前に、モデルが vision 対応か事前確認する**
    - `vision_analyze` がエラーになったら諦めるのではなく、**画像抽出→ユーザーハンドオフ**に切り替える
 3. **「全ツール使えない」シナリオの備えを持つ**
-   - pymupdf があれば画像抽出は可能 → `/workspace/` に出力してユーザーへ
+   - pymupdf があれば画像抽出は可能 → `/opt/data/workspace/` に出力してユーザーへ
 4. **SpeakerDeck PDFの確認ポイント**
    - SpeakerDeck の直接PDF URLが存在するか確認（`https://files.speakerdeck.com/presentations/<ID>/<filename>.pdf`）
    - 元ページ削除済みでもPDFが残っていることがある

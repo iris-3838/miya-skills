@@ -27,8 +27,8 @@ from typing import Any
 # ── Credentials ──────────────────────────────────────────────
 from pyzotero.zotero import Zotero
 
-CRED_FILE = Path("/workspace/.private/zotero_credentials.json")
-KB_ROOT = Path("/workspace/llm-kb.miya-lis.net")
+CRED_FILE = Path("/opt/data/workspace/.skills/zotero_credentials.json")
+KB_ROOT = Path("/opt/data/workspace/llm-kb.miya-lis.net")
 ZOTERO_DIR = KB_ROOT / "raw" / "papers" / "zotero"
 INDEX_FILE = ZOTERO_DIR / "index.md"
 

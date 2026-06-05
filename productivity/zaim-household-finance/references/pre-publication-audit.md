@@ -5,7 +5,7 @@ Use this checklist when preparing any part of the Hermes skills repo (or any Git
 ## Scan Scope
 
 Scan ALL non-gitignored files under the repo root. Exclude:
-- `.private/` (known private directory)
+- `.skills/` (known private directory)
 - `.git/`
 - Files listed in `.gitignore`
 
@@ -50,9 +50,9 @@ Look for numeric patterns that look like real transaction IDs, account numbers, 
 grep -rnP '(/\w+){4,}' --include='*.md' --include='*.py' . | grep -v '.git/' | grep -v 'http' | grep -v 'localhost'
 ```
 
-Check for: `/workspace/skills/productivity/zaim-household-finance/scripts/...` etc.
+Check for: `/opt/data/workspace/skills/productivity/zaim-household-finance/scripts/...` etc.
 
-**Action**: Replace with relative paths where possible (e.g., `scripts/foo.py` instead of `/workspace/skills/.../scripts/foo.py`).
+**Action**: Replace with relative paths where possible (e.g., `scripts/foo.py` instead of `/opt/data/workspace/skills/.../scripts/foo.py`).
 
 ### 6. API Endpoint References
 
@@ -72,7 +72,7 @@ Check for: `/workspace/skills/productivity/zaim-household-finance/scripts/...` e
 |---------|--------|
 | Hardcoded API key/token | 🔴 **Blocking** — fix before any push |
 | Username / real name | 🟡 Recommend redact |
-| Private domain name | 🟡 Recommend redact or move to `.private/` |
+| Private domain name | 🟡 Recommend redact or move to `.skills/` |
 | Absolute paths | 🟢 Fix if trivial, otherwise OK |
 | Transaction IDs | 🟡 Redact or verify mock |
 | Email address | 🔴 **Blocking** — remove before push |

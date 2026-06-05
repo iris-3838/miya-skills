@@ -38,7 +38,7 @@ from pyzotero.zotero import Zotero
 # ---------------------------------------------------------------------------
 # Credentials
 # ---------------------------------------------------------------------------
-CRED_FILE = Path("/workspace/.private/zotero_credentials.json")
+CRED_FILE = Path("/opt/data/workspace/.skills/zotero_credentials.json")
 
 
 def load_credentials() -> dict[str, str]:

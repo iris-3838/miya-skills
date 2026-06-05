@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Zotero API credentials setup.
-Stores credentials outside SKILL.md in .private/ directory.
+Stores credentials outside SKILL.md in .skills/ directory.
 """
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import sys
 import getpass
 from pathlib import Path
 
-PRIVATE_DIR = Path("/workspace/.private")
+PRIVATE_DIR = Path("/opt/data/workspace/.skills")
 CRED_FILE = PRIVATE_DIR / "zotero_credentials.json"
 
 

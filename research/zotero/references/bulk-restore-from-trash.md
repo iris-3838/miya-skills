@@ -9,7 +9,7 @@ Restore all top-level trashed items (journal articles, books, etc.) to a target 
 ```python
 import json, requests
 
-creds = json.load(open('/workspace/.private/zotero_credentials.json'))
+creds = json.load(open('/opt/data/workspace/.skills/zotero_credentials.json'))
 headers = {'Zotero-API-Version': '3', 'Zotero-API-Key': creds['api_key']}
 base = f'https://api.zotero.org/users/{creds["user_id"]}'
 

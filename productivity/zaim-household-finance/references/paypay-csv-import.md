@@ -27,18 +27,18 @@ Keep rows with methods like:
 
 ## Filter Script
 
-Location: `/workspace/scripts/zaim/filter_paypay_csv.py` (host: `~/workspace/scripts/zaim/filter_paypay_csv.py`)
+Location: `/opt/data/workspace/scripts/zaim/filter_paypay_csv.py` (host: `~/opt/data/workspace/scripts/zaim/filter_paypay_csv.py`)
 
 ### Usage
 ```bash
 # Dry-run (preview what would be removed)
-python3 ~/workspace/scripts/zaim/filter_paypay_csv.py PayPay.csv --dry-run
+python3 ~/opt/data/workspace/scripts/zaim/filter_paypay_csv.py PayPay.csv --dry-run
 
 # Filter and save
-python3 ~/workspace/scripts/zaim/filter_paypay_csv.py PayPay.csv -o PayPay_zaim.csv
+python3 ~/opt/data/workspace/scripts/zaim/filter_paypay_csv.py PayPay.csv -o PayPay_zaim.csv
 
 # Custom column name (if different locale)
-python3 ~/workspace/scripts/zaim/filter_paypay_csv.py PayPay.csv -o output.csv --method-col "取引方法"
+python3 ~/opt/data/workspace/scripts/zaim/filter_paypay_csv.py PayPay.csv -o output.csv --method-col "取引方法"
 ```
 
 ### Script Features
@@ -101,13 +101,13 @@ If a raw (unfiltered) CSV was imported before the filter rule was added, Zaim al
 
 ```
 # 1. Sync local DB
-source /workspace/.zaim_env && python3 /workspace/scripts/zaim/zaim.py sync
+source /opt/data/workspace/.zaim_env && python3 /opt/data/workspace/scripts/zaim/zaim.py sync
 
 # 2. Preview duplicates
-python3 /workspace/skills/productivity/zaim-household-finance/scripts/delete_duplicates.py --dry-run
+python3 /opt/data/workspace/skills/productivity/zaim-household-finance/scripts/delete_duplicates.py --dry-run
 
 # 3. Delete duplicates
-python3 /workspace/skills/productivity/zaim-household-finance/scripts/delete_duplicates.py
+python3 /opt/data/workspace/skills/productivity/zaim-household-finance/scripts/delete_duplicates.py
 ```
 
 See `scripts/delete_duplicates.py` in the skill for full documentation.

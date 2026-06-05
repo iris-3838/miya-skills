@@ -4,7 +4,7 @@
 
 - API Key: Zotero アカウント設定 → Feeds/API Keys で発行
 - User ID: `curl -H "Zotero-API-Key: <KEY>" https://api.zotero.org/keys/current` の `userID`
-- 認証情報は `/workspace/.private/zotero_credentials.json` に保管
+- 認証情報は `/opt/data/workspace/.skills/zotero_credentials.json` に保管
 
 ## 主要メソッド (pyzotero)
 

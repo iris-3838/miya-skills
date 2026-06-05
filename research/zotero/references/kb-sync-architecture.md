@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Mirror Zotero's collection hierarchy into `/workspace/llm-kb.miya-lis.net/raw/papers/zotero/` so an agent can navigate Zotero's folder structure directly for knowledge retrieval (agentic search).
+Mirror Zotero's collection hierarchy into `/opt/data/workspace/llm-kb.miya-lis.net/raw/papers/zotero/` so an agent can navigate Zotero's folder structure directly for knowledge retrieval (agentic search).
 
 ## Data Flow
 

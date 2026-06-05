@@ -4,7 +4,7 @@ from pyzotero.zotero import Zotero
 import json
 from pathlib import Path
 
-creds = json.loads(Path("/workspace/.private/zotero_credentials.json").read_text())
+creds = json.loads(Path("/opt/data/workspace/.skills/zotero_credentials.json").read_text())
 z = Zotero(creds["user_id"], "user", creds["api_key"])
 
 # Get all collections with pagination
@@ -49,7 +49,7 @@ lines.append(f"Total: {len(all_coll)} collections")
 result = "\n".join(lines)
 
 # Save
-out_dir = Path("/workspace/llm-kb.miya-lis.net/raw/papers/zotero/_bak")
+out_dir = Path("/opt/data/workspace/llm-kb.miya-lis.net/raw/papers/zotero/_bak")
 out_dir.mkdir(parents=True, exist_ok=True)
 (out_dir / "collection_structure.md").write_text(result)
 

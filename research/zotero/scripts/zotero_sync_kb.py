@@ -3,7 +3,7 @@
 Zotero → LLM-KB Sync Tool
 
 Reads Zotero library via Web API and creates a collection-structure mirror
-under /workspace/llm-kb.miya-lis.net/raw/zotero/ for LLM knowledge base use.
+under /opt/data/workspace/llm-kb.miya-lis.net/raw/zotero/ for LLM knowledge base use.
 
 Usage:
   python3 zotero_sync_kb.py                  # Full sync
@@ -35,8 +35,8 @@ import httpx
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-CRED_FILE = Path("/workspace/.private/zotero_credentials.json")
-KB_BASE = Path("/workspace/llm-kb.miya-lis.net")
+CRED_FILE = Path("/opt/data/workspace/.skills/zotero_credentials.json")
+KB_BASE = Path("/opt/data/workspace/llm-kb.miya-lis.net")
 OUTPUT_DIR = KB_BASE / "raw" / "zotero"
 STATE_FILE = OUTPUT_DIR / ".sync_state.json"
 INDEX_FILE = OUTPUT_DIR / ".zotero_index.json"

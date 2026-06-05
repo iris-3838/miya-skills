@@ -4,7 +4,7 @@ from pathlib import Path
 import json
 import httpx
 
-CRED_FILE = Path("/workspace/.private/zotero_credentials.json")
+CRED_FILE = Path("/opt/data/workspace/.skills/zotero_credentials.json")
 creds = json.loads(CRED_FILE.read_text())
 headers = {
     "Zotero-API-Key": creds["api_key"],

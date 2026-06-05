@@ -7,9 +7,9 @@ and deletes the newer copy (higher ID) — typically the PayPay CSV import that
 was double-imported alongside the PayPayカード statement.
 
 Usage:
-    source /workspace/.zaim_env
-    python3 /workspace/skills/productivity/zaim-household-finance/scripts/delete_duplicates.py --dry-run    # preview only
-    python3 /workspace/skills/productivity/zaim-household-finance/scripts/delete_duplicates.py               # delete duplicates
+    source /opt/data/workspace/.zaim_env
+    python3 /opt/data/workspace/skills/productivity/zaim-household-finance/scripts/delete_duplicates.py --dry-run    # preview only
+    python3 /opt/data/workspace/skills/productivity/zaim-household-finance/scripts/delete_duplicates.py               # delete duplicates
 
 Options:
     --dry-run           Preview only (no API calls)
@@ -31,7 +31,7 @@ Requires Zaim OAuth tokens in environment variables:
     ZAIM_ACCESS_TOKEN
     ZAIM_ACCESS_TOKEN_SECRET
 
-Or: source /workspace/.zaim_env (sets these vars).
+Or: source /opt/data/workspace/.zaim_env (sets these vars).
 """
 
 import os
@@ -76,7 +76,7 @@ if not all([CK, CS, AT, ASEC]):
     print(
         "Error: Zaim credentials not found.\n"
         "Source the env file first:\n"
-        "  source /workspace/.zaim_env\n"
+        "  source /opt/data/workspace/.zaim_env\n"
         "Or set these environment variables:\n"
         "  ZAIM_CONSUMER_KEY\n"
         "  ZAIM_CONSUMER_SECRET\n"
@@ -258,6 +258,6 @@ print(f"\n  DB内取引数: {total_in_db}件 → {remaining}件（{success}件�
 
 # ── Refresh local cache ─────────────────────────────────────────────
 print("\n  💡 ローカルDB（~/.zaim_cache/zaim.db）を更新するには:")
-print("     source /workspace/.zaim_env && python3 /workspace/scripts/zaim/zaim.py sync")
+print("     source /opt/data/workspace/.zaim_env && python3 /opt/data/workspace/scripts/zaim/zaim.py sync")
 
 conn.close()

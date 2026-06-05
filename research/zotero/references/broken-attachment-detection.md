@@ -30,7 +30,7 @@ Scan the ENTIRE library for linked_file attachments, then cross-reference with A
 ```python
 import json, requests, os
 
-creds = json.load(open('/workspace/.private/zotero_credentials.json'))
+creds = json.load(open('/opt/data/workspace/.skills/zotero_credentials.json'))
 headers = {'Zotero-API-Version': '3', 'Zotero-API-Key': creds['api_key']}
 base = f'https://api.zotero.org/users/{creds["user_id"]}'
 

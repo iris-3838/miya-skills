@@ -5,7 +5,7 @@ from collections import Counter
 import json
 from pathlib import Path
 
-creds = json.loads(Path("/workspace/.private/zotero_credentials.json").read_text())
+creds = json.loads(Path("/opt/data/workspace/.skills/zotero_credentials.json").read_text())
 z = Zotero(creds["user_id"], "user", creds["api_key"])
 
 # Fetch ALL collections with pagination

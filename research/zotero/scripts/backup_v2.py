@@ -5,7 +5,7 @@ from pathlib import Path
 from collections import Counter
 import json
 
-creds = json.loads(Path("/workspace/.private/zotero_credentials.json").read_text())
+creds = json.loads(Path("/opt/data/workspace/.skills/zotero_credentials.json").read_text())
 z = Zotero(creds["user_id"], "user", creds["api_key"])
 
 # Fetch ALL collections with pagination
@@ -51,7 +51,7 @@ lines.append("```")
 lines.append("")
 lines.append(f"Total: {len(all_coll)} collections")
 
-out_dir = Path("/workspace/llm-kb.miya-lis.net/raw/papers/zotero/_bak")
+out_dir = Path("/opt/data/workspace/llm-kb.miya-lis.net/raw/papers/zotero/_bak")
 out_dir.mkdir(parents=True, exist_ok=True)
 (out_dir / "structure_corrected.md").write_text("\n".join(lines))
 

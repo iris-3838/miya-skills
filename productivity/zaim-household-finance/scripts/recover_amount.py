@@ -7,9 +7,9 @@ If you previously sent only {category_id, genre_id} in a PUT request, all other 
 (amount, name, place) were set to 0/blank.
 
 Usage:
-    source /workspace/.zaim_env
-    python3 /workspace/recover_zaim_amounts.py --dry-run   # preview only
-    python3 /workspace/recover_zaim_amounts.py              # fix everything
+    source /opt/data/workspace/.zaim_env
+    python3 /opt/data/workspace/recover_zaim_amounts.py --dry-run   # preview only
+    python3 /opt/data/workspace/recover_zaim_amounts.py              # fix everything
 
 The script reads the local SQLite DB at ~/.zaim_cache/zaim.db (which preserves the
 correct original amounts) and re-PUTs each affected transaction with ALL fields.
@@ -32,7 +32,7 @@ if not all([CK, CS, AT, ASEC]):
     print(
         "Error: Zaim credentials not found.\n"
         "Source the env file first:\n"
-        "  source /workspace/.zaim_env\n"
+        "  source /opt/data/workspace/.zaim_env\n"
         "Or set these environment variables:\n"
         "  ZAIM_CONSUMER_KEY\n"
         "  ZAIM_CONSUMER_SECRET\n"
