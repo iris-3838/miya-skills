@@ -407,6 +407,7 @@ See `academic-pipeline/SKILL.md` for the complete workflow.
 | `references/systematic_review_protocol.md` | Full PRISMA pipeline, checkpoint rules, meta-analysis procedures | risk_of_bias, meta_analysis, bibliography, report_compiler |
 | `references/cross_agent_quality_definitions.md` | Peer-reviewed source tiers, currency standards, severity definitions | all agents |
 | `references/changelog.md` | Full version history | — |
+| `references/hermes-porting-glossary.md` | Hermes-specific porting notes for ARS, including Mode B via Kanban, `delegate_task` sub-agent mapping, and persistent workspace requirements | orchestrator, all phase workers |
 
 ---
 

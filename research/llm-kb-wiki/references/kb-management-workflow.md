@@ -135,6 +135,22 @@ jslis-journal-analysis-2001-2026-data.md   ← 詳細データ（〜150行）
 手動で vault にシンボリックリンク or copy が必要。
 将来のタスク候補。
 
+## Skills Inventory / Workflow Analysis Pattern
+
+環境構成やスキルワークフローの棚卸・分析結果は、以下の形式でKBに保存する：
+
+- **場所**: `concepts/<topic>-inventory/index.md`
+- **標準構成（7セクション）**:
+  1. スキル解決の優先順位
+  2. 全スキル一覧（カテゴリ別）
+  3. ワークフロー分析
+  4. 詳細分析（該当する場合）
+  5. 統合ポイントとギャップ
+  6. 推奨拡張（優先度順）
+  7. 関連ページ（KB内 `[[]]` wikilinks）
+- **出力形式**: 構造化Markdown（テキスト主体）。図は補足的にのみ使用。
+- **登録**: index.md にエントリ追加 → log.md に記録 → git commit & push
+
 ## Git Commit Message Convention
 
 ```

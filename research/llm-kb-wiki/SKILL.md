@@ -197,6 +197,7 @@ PDF到着
 ```
 
 👉 参考実例: `references/pdf-ingestion-workflow.md` の「Harness and Agent」ケーススタディ
+> 環境スキル棚卸・ワークフロー分析のパターンは `references/kb-management-workflow.md` → 「Skills Inventory / Workflow Analysis Pattern」を参照
 
 ## KB Management Workflow — 5-Phase Lifecycle
 
