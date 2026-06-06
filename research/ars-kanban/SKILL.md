@@ -127,12 +127,14 @@ Instead, Phase 2-1 registers metadata and blocks for human full-text acquisition
 Zotero Library/
   deep-research/
     <project-slug>/
-      <OpenAlex metadata + OA PDFs>
-      <CrossRef-enriched metadata>
-      <J-STAGE PDFs>
-      <CiNii Research metadata>
-      <manual paywalled full-text attachments added by the user>
+      01-10/
+      11-20/
+      21-30/
+      31-40/
+      ...
 ```
+
+For C-mode/additional literature, assign each item a `relevance:N` tag and the Zotero Japanese UI **「番号」** field (API `issue`) with the same numeric score. Then place the item in exactly one direct child collection by relevance range (`01-10`, `11-20`, `21-30`, ...), removing direct membership in the project parent but preserving unrelated collection memberships. This keeps priority visible for Phase 2-2: higher ranges are higher-priority review candidates.
 
 The project path is stored as:
 
@@ -190,6 +192,18 @@ python scripts/init_board.py "Bates vs Hjørland information concepts" --mode c
 python scripts/phase_worker.py <task_id>
 python scripts/phase_worker.py <task_id> --dry-run
 ```
+
+### Phase 2-1 Query Pitfall
+
+`c_literature_acquisition.collect_records_for_preview()` currently sends the task body's `topic` string directly to OpenAlex/CiNii. Mixed Japanese+English topics or highly discursive Japanese prompts can return 0 records even when obvious English literature exists. For C mode literature acquisition, use an English search-oriented topic when possible, or manually seed Phase 2-1 with targeted English queries and write the curated results to the phase workspace's `literature_records.json` / `literature_preview.md` before blocking for Zotero selection. Semantic Scholar may be listed in task policy and an API key may exist, but the built-in collector is still planned rather than fully integrated.
+
+### Board Slug Length Pitfall
+
+`init_board.py` derives the Kanban board slug directly from the full `topic`. Hermes Kanban board slugs are limited to 64 characters, so long detailed research questions can fail during board/task creation. Use a short English topic for `init_board.py` (for example, `Bates-Hjorland direct information concept controversy`) and store the detailed research question, inclusion/exclusion criteria, and search strategy in Phase 1 artifacts or Kanban comments. If a long topic run fails with empty/non-JSON task creation output, retry with a shorter topic slug rather than reusing the discursive prompt as the topic.
+
+### Expanded Citation-Corpus Runs
+
+When expanding a Phase 2-1 corpus beyond direct search results (e.g., seed papers + Semantic Scholar citing papers), keep the run artifacts in the phase workspace (`literature_records_expanded.json`, `expanded_collection_summary.md`, `expanded_collection_stats.json`, `zotero_export_expanded.json`) and then complete the Kanban task with those paths in metadata. Use the Zotero skill venv for exports (`/opt/data/workspace/miya-skills/research/zotero/.venv/bin/python`) because system Python may not have `pyzotero`. Semantic Scholar's `/citations` endpoint does **not** accept `citingPaper.tldr`; use citation-safe fields such as `citingPaper.paperId,title,authors,year,venue,abstract,externalIds,isOpenAccess,openAccessPdf,citationCount,referenceCount,influentialCitationCount,url`. API 429s can occur on large citation walks; record partial counts in `expanded_collection_stats.json` and retry only missing offsets to avoid duplicating Zotero items.
 
 ## Tests
 

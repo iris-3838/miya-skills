@@ -25,6 +25,82 @@ Use with `openalex-literature-survey` skill.
 - **KO**: Classification, ontologies, knowledge graphs, semantic enrichment, automatic classification, AI×KO
 - **Library Trends**: Themed special issues (currently: data literacy, community data, computational pedagogy)
 
+## LISTA vs OpenAlex Coverage Comparison
+
+Verified 2026-06 via EBSCO's official LISTA title list (`lxh-coverage.htm`) and OpenAlex API cross-checks (~80 LIS journals tested).
+
+### Core Finding
+
+**OpenAlex covers ~95%+ of internationally-recognised academic LIS journals.** The gap is concentrated in three categories: (a) non-English regional LIS journals, (b) US state library association journals, (c) trade publications without DOIs.
+
+### Journals in LISTA (Core/Priority, peer-reviewed) but NOT in OpenAlex
+
+These are scholarly/academic journals where LISTA is the only practical source for bibliographic records and abstracts:
+
+| Journal | ISSN | Country | Coverage in LISTA |
+|---------|------|---------|-------------------|
+| **Zeitschrift für Bibliothekswesen und Bibliographie (ZfBB)** | 0044-2380 | 🇩🇪 Germany | Core, 1964–present |
+| **Türk Kütüphaneciliği** (Turkish Librarianship) | 1300-0039 | 🇹🇷 Turkey | Core, 2006–present |
+| **Tudományos és Műszaki Tájékoztatás** | 0041-3917 | 🇭🇺 Hungary | Core, 1965–present |
+| **ALISS Quarterly** | 1747-9258 | 🇬🇧 UK | Core, 2005–present |
+| **APLIS** (Australasian Public Libraries) | 1030-5033 | 🇦🇺 Australia | Core, 1990–2012 (ceased) |
+| **Anuario Think EPI** | 1886-6344 | 🇪🇸 Spain | Core, 2012–present |
+| **Singapore J. of Library & Inf. Management** | 2382-5626 | 🇸🇬 Singapore | Core, 2005–present |
+| **Pakistan J. of Library & Inf. Science** | — | 🇵🇰 Pakistan | Core |
+| **JLIS.it** (Italian J. of LIS) | — | 🇮🇹 Italy | Core |
+| **Signum** (Finnish research lib. journal) | 0355-0036 | 🇫🇮 Finland | Core, 2006–present |
+| **Zagadnienia Informacji Naukowej** | 0324-8194 | 🇵🇱 Poland | Core, 1972–present |
+| **Library Mosaics** | — | 🇺🇸 US | Core (ceased) |
+
+### Journals with very limited OpenAlex coverage (<200 works, or miscategorised)
+
+These are in LISTA as Core/Priority academic journals but OpenAlex has minimal records:
+
+| Journal | OpenAlex Status | Notes |
+|---------|----------------|-------|
+| **Information Outlook** (SLA magazine) | 93 works only | SLA's flagship magazine; mostly DOIs missing |
+| **Scrineum** (Italian) | 0 works as journal | Listed but zero records |
+| **Simbiosis** (Puerto Rico) | 156 works | Miscategorised as biology journal |
+| **Urban Library Journal** | 66 works | Very sparse |
+| **Teacher Librarian** | 144 works | Partial coverage |
+
+### US State Library Association Journals (all in LISTA Core, none in OpenAlex)
+
+These are peer-reviewed or professional journals from state library associations. OpenAlex does not index them because they typically lack DOIs and are not deposited in Crossref:
+
+- Texas Library Journal
+- Kentucky Libraries
+- Louisiana Libraries
+- Mississippi Libraries
+- Missouri Libraries
+- Colorado Libraries (listed as repository in OA with 12,903 works — misleading)
+- West Virginia Libraries
+- Alabama Librarian
+- Alki: Washington Library Association Journal
+- Tennessee Libraries (listed as ebook platform, 21 works)
+- Virginia Libraries (✅ 445 works — exception)
+
+### Trade Publications in LISTA but absent from OpenAlex
+
+- **Searcher** / **Online Searcher** (Information Today) — ceased 2012
+- **Technicalities** — LIS management trade
+- **Information Today** — industry newspaper
+- **AIIM E-DOC** — document management trade
+
+### Methodology notes
+
+LISTA title list HTML is available at:
+```
+https://about.ebsco.com/m/ee/Marketing/titleLists/lxh-coverage.htm
+```
+Database code: `lxh`. Excel version at `lxh-coverage.xls`.
+
+To cross-check OpenAlex coverage for any journal, use:
+```
+GET https://api.openalex.org/sources?search={journal_name}&select=id,display_name,works_count,type
+```
+A journal returning <100 works or wrong type (repository/ebook-platform instead of journal) indicates a coverage gap. Always verify the display_name matches — OpenAlex sometimes returns a homonym.
+
 ## Conference Series
 
 | Conference | OpenAlex Coverage | Notes |

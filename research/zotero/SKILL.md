@@ -382,6 +382,18 @@ python3 /opt/data/workspace/skills/research/zotero/scripts/zotero_client.py coll
 
 **Caveat:** The backup script (`backup_structure.py`) captures all collections including orphans, so review a fresh backup before any restructuring to understand the full picture.
 
+## Bulk Metadata Updates
+
+When the user asks to write values into Zotero's Japanese UI field **「番号」** for `journalArticle` items, update the API field `issue`. Use raw API `PATCH /items/{key}` with a fresh item `version` and `If-Unmodified-Since-Version`; for hundreds of items, first build a deterministic key→value mapping (DOI/title or creation/export order), then verify with paginated `/collections/{key}/items` that every item has a numeric `data.issue`. If items unexpectedly disappear from collection listings, check `data.deleted`: trashed items can still retain `collections[]` but are hidden from normal collection item listings; restore only explicitly targeted items with `{"deleted": false, "collections": existing + [target]}`.
+
+## Relevance Range Subcollections
+
+When the user asks to make priority visible for collected/additional literature, organize Zotero project items into direct child collections named by relevance ranges: `01-10`, `11-20`, `21-30`, ... . Read score from tag `relevance:N` first and fall back to the Japanese UI field **「番号」** / API `issue`. For each item, compute `lo=((score-1)//10)*10+1`, `hi=lo+9`, then PATCH the item's `collections` to remove the project parent and any sibling range bucket, add exactly the target range child, and preserve unrelated collection memberships. Verify: parent direct top-items should be 0, unique items across range buckets should equal the corpus size, and wrong/missing/duplicate bucket counts should all be 0.
+
+### Pitfalls
+
+- **Near-duplicate items across ranges.** Items with the same DOI or canonicalized title can appear in multiple range collections (e.g., Hjørland 2007 appeared as `35VRZAJF` in `31-40` and `2J938I7V` in `41-50`). After moving items into range buckets, scan for DOIs appearing in more than one range child and flag them for canonicalization. Deduplicate by preferring the item with the canonical DOI (e.g., `10.1002/asi.20620` over `10.1002/asi.v58:10`). Report the merge in phase artifacts so Phase 3 analysis treats them as one source.
+
 ## Bulk Restructuring (100+ Collections)
 
 For large-scale reorganization (hundreds of collections), `zotero_client.py collection-move` is too slow one-at-a-time. Use raw API calls with `requests.patch` and version headers:
@@ -623,6 +635,72 @@ while True:
     start += 100
     if len(data) < 100: break
 ```
+
+## Zotero PDF → pdf2zh-next Translation
+
+Use this when the user says e.g. 「このZotero論文を翻訳して」「ZoteroのPDFをbilingualにして」. It connects Zotero attachment download with the uv-managed pdf2zh-next environment at `/opt/data/workspace/pdf2zh-env`.
+
+### Environment
+
+The Zotero skill has its own uv environment:
+
+```bash
+cd /opt/data/workspace/miya-skills/research/zotero
+uv sync --python 3.12
+```
+
+The pdf2zh-next environment is separate:
+
+```bash
+/opt/data/workspace/pdf2zh-env/.venv/bin/pdf2zh --version
+```
+
+### Translate a Zotero item PDF
+
+Prefer parent item keys when known:
+
+```bash
+cd /opt/data/workspace/miya-skills/research/zotero
+.venv/bin/python scripts/zotero_pdf2zh.py --item ITEMKEY --pages 1-10
+```
+
+Search by title/author when the key is unknown:
+
+```bash
+.venv/bin/python scripts/zotero_pdf2zh.py --query "Bates information knowledge" --pages 1-10
+```
+
+Defaults:
+- user library, not group library
+- `--bing`
+- `--lang-in en --lang-out ja`
+- output root: `/opt/data/workspace/llm-kb.miya-lis.net/raw/papers/zotero_pdf2zh/`
+- chooses the original `PDF` attachment over existing `mono`/`dual`/`compare` translated attachments when multiple PDFs exist
+
+Useful options:
+
+```bash
+# Preview without download/translation
+.venv/bin/python scripts/zotero_pdf2zh.py --item ITEMKEY --dry-run
+
+# Translate a specific child attachment
+.venv/bin/python scripts/zotero_pdf2zh.py --item ITEMKEY --attachment ATTACHMENTKEY
+
+# Upload translated PDFs back to Zotero as child attachments
+.venv/bin/python scripts/zotero_pdf2zh.py --item ITEMKEY --attach-output
+
+# Add a Zotero child note with local output paths after successful translation
+.venv/bin/python scripts/zotero_pdf2zh.py --item ITEMKEY --add-note
+
+# Group library, only if the API key permits it; do not modify group libraries unless explicitly requested
+.venv/bin/python scripts/zotero_pdf2zh.py --group GROUP_ID --item ITEMKEY
+```
+
+### Pitfalls
+
+- `linked_file` attachments often point to stale Windows/OneDrive paths and may not have a downloadable `enclosure`; the script reports this instead of guessing.
+- Do not use `--add-note` unless the user wants Zotero modified. The default writes only local files.
+- For long PDFs, use `terminal(background=true, notify_on_complete=true)` or a high foreground timeout; 150-page books can take 3h+.
 
 ## References
 - `references/web-api-v3.md` — API endpoint reference
