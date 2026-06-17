@@ -1,0 +1,10 @@
+[project]
+name = "zotero-skill-env"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "pyzotero>=1.6.11",
+  "httpx>=0.28.0",
+  "requests>=2.32.0",
+  "pymupdf>=1.27.2.3",
+]

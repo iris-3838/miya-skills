@@ -1,7 +1,7 @@
 ---
 name: ars-kanban
 description: ARS (Academic Research System) phase workers that run via Hermes Kanban. Implements Phase 1-6 pipeline with Socratic dialogue mode, C mode deep-research acquisition loop, and Wording-Pattern Advisory.
-version: 0.2.0
+version: 0.3.0
 metadata:
   hermes:
     tags: [academic, research, kanban, phase-worker, socratic, zotero]
@@ -90,6 +90,71 @@ research into:
    databases (e.g. ProQuest/LISA) and attaches paywalled PDFs to Zotero.
 3. **Zotero-corpus investigation** — the agent analyzes the enriched Zotero
    collection and may request another acquisition loop if gaps remain.
+
+### Phase 2-1: Two Collection Modes
+
+Phase 2-1 supports two literature acquisition strategies. The task body
+`c_mode.collection_mode` field selects which mode a worker should follow;
+if absent, default to **keyword search** (the `collect_records_for_preview()`
+engine). The Phase 1 Scoping deliverable should specify which mode is
+appropriate for the research question.
+
+#### Keyword-Search Mode (default)
+
+Uses OpenAlex / CrossRef / J-STAGE / CiNii keyword queries driven by the
+task body's `topic` string. Best for:
+- Broad topical surveys where the literature is defined by subject area
+- Topics with well-established keyword vocabularies
+- First-pass acquisition to establish a baseline corpus
+
+#### Snowball / Saturation Collection Mode (alternative)
+
+Uses the seed corpus (defined in Phase 1) as the starting point, then
+recursively follows their cited-reference lists outward. Best for:
+- Well-bounded debates with a known seed corpus (e.g., a set of special issues)
+- Topics where keyword search misses key literature (philosophy, theory debates)
+- Exhaustive coverage requirements ("芋づる式" / potato-vine pulling, the user's
+  instruction to scroll through every referenced work systematically)
+
+When this mode is chosen, **do NOT run `collect_records_for_preview()`**;
+execute the snowball protocol instead (see `references/snowball-collection-protocol.md`).
+
+##### Layer Protocol
+
+```
+Layer 0 (Seed): The corpus defined in Phase 1 (e.g., 5 special issues)
+    ↓ extract all cited references
+Layer 1: Resolve every reference via OpenAlex (preferred) or CrossRef (fallback)
+         → full metadata + abstract + OA status
+         → tag with layer:1, source_seed:<paper_id>
+    ↓ for each Layer 1 paper, extract its cited references
+Layer 2: Resolve and retrieve — but FILTER by relevance first
+         (domain: LIS, PI, epistemology, social epistemology, domain analysis)
+         → tag with layer:2
+    ↓
+Zotero: Assign relevance:N score → classify into subcollections
+```
+
+Layer 2 relevance filtering is **mandatory** — unfiltered second-degree
+snowball can explode from ~2K to ~40K records. Use the scoring criteria
+in `references/snowball-collection-protocol.md` to decide which Layer 1
+papers are worth expanding.
+
+##### Relevance Scoring for Zotero Subcollections
+
+| Score | Criteria |
+|:-----:|----------|
+| 10 | Direct engagement with the core RQ (e.g., Floridi PI as LIS foundation) |
+| 8-9 | Substantive engagement with the debate or its key concepts |
+| 6-7 | Related theoretical literature (competing frameworks, methodology) |
+| 4-5 | Contextual literature (history, adjacent philosophy, meta-theory) |
+| 1-3 | Peripheral (cited for background only, not directly relevant) |
+
+Assign each item a `relevance:N` Zotero tag AND the Japanese UI
+**「番号」** field (API `issue`) with the same score. Then place it in a
+direct child collection by range (`01-10`, `11-20`, ...), removing direct
+membership in the project parent (as described in the Zotero Layout section
+below).
 
 ### Phase 2-1: Literature Acquisition Sources
 
@@ -192,6 +257,8 @@ python scripts/init_board.py "Bates vs Hjørland information concepts" --mode c
 python scripts/phase_worker.py <task_id>
 python scripts/phase_worker.py <task_id> --dry-run
 ```
+
+For C-mode bootstrap details, see `references/c-mode-init-board-pitfalls.md`.
 
 ### Phase 2-1 Query Pitfall
 

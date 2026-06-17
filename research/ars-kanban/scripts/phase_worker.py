@@ -9,12 +9,39 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, Union
 
 HERMES = "/opt/hermes/bin/hermes"
+
+_SKILLS_CREDENTIALS = Path("/opt/data/workspace/.skills")
+_SEMANTIC_SCHOLAR_CREDENTIALS = _SKILLS_CREDENTIALS / "semantic_scholar_credentials.json"
+
+
+def _load_skill_credentials() -> None:
+    """Load API keys from workspace/.skills/ into environment variables.
+
+    Follows the hermes-skill-credential-patterns convention: credential files
+    live in /opt/data/workspace/.skills/ (git-ignored, chmod 600).
+    Currently loads Semantic Scholar API key.
+    """
+    # Semantic Scholar
+    if not os.environ.get("SEMANTIC_SCHOLAR_API_KEY"):
+        if _SEMANTIC_SCHOLAR_CREDENTIALS.exists():
+            try:
+                data = json.loads(_SEMANTIC_SCHOLAR_CREDENTIALS.read_text())
+                key = data.get("api_key")
+                if key:
+                    os.environ["SEMANTIC_SCHOLAR_API_KEY"] = key
+            except (json.JSONDecodeError, OSError):
+                pass
+
+
+# Load credentials at import time so they're available to all consumers
+_load_skill_credentials()
 
 # Ensure sibling modules (passport_layer, kb_sync, socratic_phase) are importable
 _SCRIPTS_DIR = str(Path(__file__).resolve().parent)

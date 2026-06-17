@@ -124,7 +124,7 @@ curl -s http://localhost:3876/health
 | `timeEstimate` | number | ❌ | ミリ秒 |
 | `timeSpent` | number | ❌ | ミリ秒 |
 | `dueDay` | string | ❌ | `YYYY-MM-DD` 形式 |
-| `dueWithTime` | string | ❌ | ISO日時 |
+| `dueWithTime` | number | ❌ | ミリ秒タイムスタンプ（Unix ms）。ISO文字列は不可、500エラーになる |
 | `plannedAt` | string | ❌ | ISO日時 |
 | `subTaskIds` | - | ❌ | 作成時は指定不可（400） |
 
@@ -374,7 +374,7 @@ tags = {t['id']: t['title'] for t in json.loads(terminal(f"curl -s {SP}/tags")['
   timeSpentOnDay: Record<string, number>,  // 日別作業時間 {"YYYY-MM-DD": ms}
   timeEstimate: number,    // 見積もり時間（ms）
   dueDay?: string,         // 期限日 "YYYY-MM-DD"
-  dueWithTime?: string,    // 期限日時（ISO）
+  dueWithTime?: number,    // 期限日時（Unix ms タイムスタンプ）
   plannedAt?: string,      // 予定日時（ISO）
   notes?: string,          // メモ
   attachments: [],         // 添付ファイル
@@ -399,6 +399,7 @@ tags = {t['id']: t['title'] for t in json.loads(terminal(f"curl -s {SP}/tags")['
 - **`references/academic-argument-validation.md`** — 学会発表準備 × Deep Research 定期検証 cron の統合パターン。理論的対立の検証を毎日自動実行し、SP タスクと連携する。
 - **`references/api-limitations.md`** — SP Local REST API の制限詳細（`/executeGlobalCommand` の動作確認結果、ルーティング制限のテスト記録）。
 - **`skill: pomo`** — ポモドーロタイマー実装。SP と統合済み。
+- **`scripts/sp-list.py`（sp skill配下）** — タスク一覧をプロジェクト別・期限順で1行1タスク表示。期限超過/今日〆切/近日を色分け。`python3 /opt/data/workspace/miya-skills/productivity/sp/scripts/sp-list.py` で実行。
 
 ## トラブルシューティング
 
@@ -471,6 +472,24 @@ except Exception as e:
 状態ファイルが古いままだと次回の変更検知時に過去との差分比較ができないため、復旧後は `rm ~/.hermes/scripts/sp-task-watchdog-state.json` でリセットし、次回実行時にフル出力させること。
 
 ## 注意点・既知の問題
+
+### dueWithTime は数値（ミリ秒タイムスタンプ）
+
+`dueWithTime` は **数値（Unix ms タイムスタンプ）** で送る必要がある。ISO 8601 文字列（`"2026-06-07T12:00:00"`）を渡すと `500 INTERNAL_ERROR` になる。
+
+```python
+# ✅ 正: JST 23:59 を ms に変換
+from datetime import date, datetime, timezone, timedelta as td
+jst = timezone(td(hours=9))
+dt = datetime(2026, 6, 7, 23, 59, 59, tzinfo=jst)
+ts = int(dt.timestamp() * 1000)
+# POST or PATCH 時に {"dueWithTime": ts}
+
+# ❌ 誤: ISO文字列は動かない
+{"dueWithTime": "2026-06-07T23:59:59"}  # → 500 INTERNAL_ERROR
+```
+
+注意：UTC環境（Hermesコンテナなど）から日本時間で期限を指定する場合は、JST（UTC+9）を考慮したタイムスタンプを計算すること。`datetime.fromtimestamp()` の表示がUTCになるので、タイムゾーンを明示的に指定して生成する必要がある。
 
 ### dueDay 自動割り当て
 

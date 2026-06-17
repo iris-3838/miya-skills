@@ -462,6 +462,7 @@ for k, v in cols.items():
 | pyzotero import error | Wrong Python path | Use `python3 -m pip install pyzotero --break-system-packages` |
 | Attachment won't download | Linked file with stale path | Check `check_attachments_detail.py` → re-import file |
 | `400` adding item to collection | Using wrong endpoint (`POST /collections/{key}/items`) | Use `PATCH /items/{key}` with `collections` field instead |
+| `400` downloading PDF via `/items/{parent_key}/file` | Parent-file endpoint rejects non-attachment items | Use `/items/{attachment_key}/file` instead — always resolve the child attachment key via `/items/{parent_key}/children` first. Both `parent_key` and `attachment_key` may be tried; the attachment path is the reliable one. Prefer `allow_redirects=True` with `requests.get()`. |
 
 ## ゴミ箱アイテムの復元
 
@@ -661,20 +662,41 @@ Prefer parent item keys when known:
 
 ```bash
 cd /opt/data/workspace/miya-skills/research/zotero
-.venv/bin/python scripts/zotero_pdf2zh.py --item ITEMKEY --pages 1-10
+.venv/bin/python scripts/zotero_pdf2zh.py --item ITEMKEY
 ```
 
 Search by title/author when the key is unknown:
 
 ```bash
-.venv/bin/python scripts/zotero_pdf2zh.py --query "Bates information knowledge" --pages 1-10
+.venv/bin/python scripts/zotero_pdf2zh.py --query "Bates information knowledge"
 ```
+
+#### Translation Engine
+
+The script supports these engines: `bing`, `openai`, `deepl`, `google`, `deepseek`, `ollama`, `gemini`, `groq`, `openaicompatible`, `siliconflowfree`.
+
+For **OpenCode AI** (deepseek models via OpenCode API):
+
+```bash
+# Source env first for API key access
+source /opt/data/.env
+
+.venv/bin/python scripts/zotero_pdf2zh.py --item ITEMKEY \
+  --engine openaicompatible \
+  --openai-compatible-model deepseek-v4-flash \
+  --openai-compatible-base-url https://opencode.ai/zen/go/v1 \
+  --openai-compatible-api-key-env OPENCODE_GO_API_KEY
+```
+
+**Pitfall:** `source /opt/data/.env` must be called in the same shell process — the Hermes terminal tool's default shell does NOT inherit Hermes's own env vars. A `bash` heredoc or explicit `source` before the script call is required for the `--openai-compatible-api-key-env` resolution to succeed.
 
 Defaults:
 - user library, not group library
-- `--bing`
+- `--bing` (no API key needed, but rate-limited)
 - `--lang-in en --lang-out ja`
 - output root: `/opt/data/workspace/llm-kb.miya-lis.net/raw/papers/zotero_pdf2zh/`
+- `--qps 1` (rate limit)
+- `--skip-scanned-detection` (avoids false skips on OCR'd PDFs)
 - chooses the original `PDF` attachment over existing `mono`/`dual`/`compare` translated attachments when multiple PDFs exist
 
 Useful options:
@@ -696,15 +718,62 @@ Useful options:
 .venv/bin/python scripts/zotero_pdf2zh.py --group GROUP_ID --item ITEMKEY
 ```
 
+#### Batch Translation (Multiple Items)
+
+For translating a series of items (e.g., core debate literature), create a bash script that sources env once and loops:
+
+```bash
+#!/usr/bin/env bash
+source /opt/data/.env
+SCRIPT=".venv/bin/python scripts/zotero_pdf2zh.py"
+ENGINE_ARGS="--engine openaicompatible \
+  --openai-compatible-model deepseek-v4-flash \
+  --openai-compatible-base-url https://opencode.ai/zen/go/v1 \
+  --openai-compatible-api-key-env OPENCODE_GO_API_KEY"
+
+declare -a ITEMS=("KEY1" "KEY2" "KEY3")  # Zotero parent item keys
+cd /opt/data/workspace/miya-skills/research/zotero
+for ITEM in "${ITEMS[@]}"; do
+  $SCRIPT --item "$ITEM" $ENGINE_ARGS 2>&1
+done
+```
+
+Run with `terminal(background=true, notify_on_complete=true)` and a generous timeout (2h+ for 10+ papers). Each PDF takes 5–15 minutes depending on page count and model latency.
+
+A reusable batch template lives at `templates/batch-pdf2zh.sh` — edit the `ITEMS` array and run directly.
+
+#### Checking Items for PDF Attachments First
+
+Before translating, verify the target items have downloadable PDFs. Items collected from Semantic Scholar may only have metadata links, not full-text PDFs:
+
+```python
+from pyzotero.zotero import Zotero
+import json
+
+creds = json.load(open("/opt/data/workspace/.skills/zotero_credentials.json"))
+z = Zotero(creds["user_id"], "user", creds["api_key"])
+
+for item in z.collection_items_top("COLLECTION_KEY"):
+    key = item["data"]["key"]
+    children = z.children(key)
+    pdfs = [c for c in children if
+            c["data"].get("contentType") == "application/pdf"
+            or (c["data"].get("itemType") == "attachment"
+                and c["data"].get("linkMode") == "imported_file")]
+    print(f"{key}: {len(pdfs)} PDF(s)")  # 0 means no downloadable full-text
+```
+
 ### Pitfalls
 
 - `linked_file` attachments often point to stale Windows/OneDrive paths and may not have a downloadable `enclosure`; the script reports this instead of guessing.
 - Do not use `--add-note` unless the user wants Zotero modified. The default writes only local files.
 - For long PDFs, use `terminal(background=true, notify_on_complete=true)` or a high foreground timeout; 150-page books can take 3h+.
+- `source /opt/data/.env` must be called in the same subprocess. Hermes secret redaction masks key values in `.env` output, but the actual values ARE in the file — an inline `source` works; an `export KEY=$(grep ...)` approach may fail because the terminal tool redacts the grep output.
 
 ## References
 - `references/web-api-v3.md` — API endpoint reference
 - `references/api.md` — pyzotero method reference & folder restructuring guide
+- `references/publications-endpoint.md` — My Publications endpoint (separate from regular collections — different API path, no pyzotero support)
 - `references/bulk-reorganization.md` — complete workflow for restructuring 200+ collections via raw API
 - `references/orphan-detection.md` — detecting and fixing orphaned collections
 - `references/tag-based-organization.md` — tag-based status management workflow (Archive / In-progress / Collection)

@@ -101,8 +101,8 @@ Not sure? Start with `socratic` — it will help you figure out what you need.
 
 | # | Agent | Role | Phase |
 |---|-------|------|-------|
-| 1 | `research_question_agent` | Transforms vague topics into precise, FINER-scored research questions with scope boundaries | Phase 1, Socratic Layer 1 |
-| 2 | `research_architect_agent` | Designs methodology blueprint: paradigm, method, data strategy, analytical framework, validity criteria | Phase 1 |
+| 1 | `research_question_agent` | Transforms vague topics into precise, FINER-scored research questions with scope boundaries. For dual-focus projects, avoid prematurely demoting a focal object to a mere case or overstating symmetry between focal and broader RQs; use `references/rq_architecture_patterns.md`. | Phase 1, Socratic Layer 1 |
+| 2 | `research_architect_agent` | Designs methodology blueprint: paradigm, method, data strategy, analytical framework, validity criteria. For focal-debate + broad-theory designs, explicitly define the bridge RQ and the limits of analytical generalization. | Phase 1 |
 | 3 | `bibliography_agent` | Systematic literature search, source screening, annotated bibliography in APA 7.0 | Phase 2 |
 | 4 | `source_verification_agent` | Fact-checking, source grading (evidence hierarchy), predatory journal detection, conflict-of-interest flagging | Phase 2 |
 | 5 | `synthesis_agent` | Cross-source integration, contradiction resolution, thematic synthesis, gap analysis | Phase 3 |
@@ -403,11 +403,13 @@ See `academic-pipeline/SKILL.md` for the complete workflow.
 | `references/systematic_review_toolkit.md` | Cochrane v6.4, PRISMA 2020, RoB 2, ROBINS-I, I² guide, GRADE, protocol registration | risk_of_bias, meta_analysis, bibliography, report_compiler |
 | `references/literature_monitoring_strategies.md` | Google Scholar alerts, PubMed alerts, RSS feeds, Retraction Watch, citation tracking, monitoring cadence | monitoring_agent |
 | `references/argumentation_reasoning_framework.md` | Cognitive framework for evaluating argument strength: Toulmin model, causal reasoning (Bradford Hill), inference to best explanation, epistemic status classification | synthesis, devils_advocate, source_verification, socratic_mentor, research_architect |
+| `references/rq_architecture_patterns.md` | RQ architecture patterns for dual-focus studies: bounded focal debate + broader theoretical ambition, bridge RQs, term definitions, and DA checks | research_question, research_architect, devils_advocate |
 | `references/socratic_mode_protocol.md` | Full 5-layer Socratic dialogue flow, management rules, auto-end conditions | socratic_mentor, research_question |
 | `references/systematic_review_protocol.md` | Full PRISMA pipeline, checkpoint rules, meta-analysis procedures | risk_of_bias, meta_analysis, bibliography, report_compiler |
 | `references/cross_agent_quality_definitions.md` | Peer-reviewed source tiers, currency standards, severity definitions | all agents |
 | `references/changelog.md` | Full version history | — |
 | `references/hermes-porting-glossary.md` | Hermes-specific porting notes for ARS, including Mode B via Kanban, `delegate_task` sub-agent mapping, and persistent workspace requirements | orchestrator, all phase workers |
+| `references/completed-research-resume-pattern.md` | Resuming a completed deep research project: finding the session, checking Kanban/llm-kb status, offering next-step options | all agents |
 
 ---
 
