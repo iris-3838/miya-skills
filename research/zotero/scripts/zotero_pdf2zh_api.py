@@ -255,6 +255,46 @@ async def run_translate(settings: SettingsModel, pdf_path: Path, progress_log: P
     return result
 
 
+def translated_pdfs(out_dir: Path) -> list[Path]:
+    return sorted(p for p in out_dir.glob("*.pdf") if p.is_file())
+
+
+def attach_outputs_to_zotero(
+    parent_key: str,
+    out_dir: Path,
+    creds: dict[str, str],
+    group: str | None = None,
+    title_prefix: str = "pdf2zh",
+) -> None:
+    from pyzotero.zotero import Zotero
+
+    pdfs = translated_pdfs(out_dir)
+    if not pdfs:
+        raise SystemExit(f"No translated PDFs found in {out_dir}; cannot attach to Zotero")
+    library_id = group or creds["user_id"]
+    library_type = "group" if group else "user"
+    z = Zotero(library_id, library_type, creds["api_key"])
+    files = [(f"{title_prefix} {p.name}", str(p)) for p in pdfs]
+    result = z.attachment_both(files, parentid=parent_key)
+    print(f"✓ Attached {len(files)} translated PDF(s) to Zotero item {parent_key}")
+    print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+
+
+def add_zotero_note(client: httpx.Client, base: str, parent_key: str, out_dir: Path) -> None:
+    pdfs = [str(p) for p in translated_pdfs(out_dir)]
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    note_html = (
+        f"<p>pdf2zh-next translation completed at {now}</p>"
+        + "<ul>"
+        + "".join(f"<li><code>{p}</code></li>" for p in pdfs)
+        + "</ul>"
+    )
+    payload = [{"itemType": "note", "parentItem": parent_key, "note": note_html}]
+    r = client.post(f"{base}/items", json=payload)
+    r.raise_for_status()
+    print(f"✓ Added Zotero child note for {parent_key}")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Zotero PDF attachment -> pdf2zh-next Python API")
     p.add_argument("--item", help="Zotero parent item key")
@@ -283,10 +323,11 @@ def main() -> None:
     p.add_argument("--primary-font-family", choices=["serif", "sans-serif", "script"])
     p.add_argument("--no-mono", action="store_true")
     p.add_argument("--no-dual", action="store_true")
+    p.add_argument("--add-note", action="store_true", help="Add a Zotero child note with local output paths")
+    p.add_argument("--attach-output", action="store_true", help="Upload translated mono/dual PDFs back to the Zotero parent item")
+    p.add_argument("--attachment-title-prefix", default="pdf2zh", help="Title prefix for uploaded Zotero attachments")
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
-
-    # output is per-item directory; we pass the parent so pdf2zh creates its own subdir.
     item_dir = Path(args.out)  # caller builds title__key below
     item_dir.mkdir(parents=True, exist_ok=True)
     args.output = str(item_dir / "translated")
@@ -323,6 +364,19 @@ def main() -> None:
         result_file = out_dir / "translation_result.json"
         result_file.write_text(json.dumps(result, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
         print(f"Result written to: {result_file}")
+        if args.add_note and not args.dry_run:
+            add_zotero_note(client, base, item_key, out_dir)
+        if args.attach_output:
+            if args.dry_run:
+                print(f"[dry-run] would attach translated PDFs from {out_dir} to Zotero item {item_key}")
+            else:
+                attach_outputs_to_zotero(
+                    item_key,
+                    out_dir,
+                    creds,
+                    group=args.group,
+                    title_prefix=args.attachment_title_prefix,
+                )
 
 if __name__ == "__main__":
     main()
