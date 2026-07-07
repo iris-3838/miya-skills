@@ -213,5 +213,62 @@ class TestPhaseVersionLabels(unittest.TestCase):
             self.assertIn("-v0", label)
 
 
+class TestSchema9V2OptionalFields(unittest.TestCase):
+    """Schema 9 v2 optional field validation."""
+
+    def _base_passport(self, **extras):
+        p = {
+            "origin_skill": "deep-research",
+            "origin_mode": "full",
+            "origin_date": "2026-06-05T00:00:00Z",
+            "verification_status": "UNVERIFIED",
+            "version_label": "phase1-v0",
+        }
+        p.update(extras)
+        return p
+
+    def test_claim_verification_report_accepts_dict(self):
+        passport = self._base_passport(claim_verification_report={"passed": True})
+        self.assertEqual(pp.validate_passport(passport, strict=False), [])
+
+    def test_invalid_claim_verification_report_type_rejected(self):
+        passport = self._base_passport(claim_verification_report="not a dict")
+        errors = pp.validate_passport(passport, strict=False)
+        self.assertTrue(any("claim_verification_report" in e for e in errors))
+
+    def test_trust_chain_frontmatter_accepts_dict(self):
+        passport = self._base_passport(trust_chain_frontmatter={"source": "openalex"})
+        self.assertEqual(pp.validate_passport(passport, strict=False), [])
+
+    def test_literature_corpus_accepts_valid_list(self):
+        passport = self._base_passport(literature_corpus=[{"title": "Foundations of LIS"}])
+        self.assertEqual(pp.validate_passport(passport, strict=False), [])
+
+    def test_literature_corpus_item_requires_title_or_doi(self):
+        passport = self._base_passport(literature_corpus=[{"year": 2020}])
+        errors = pp.validate_passport(passport, strict=False)
+        self.assertTrue(any("literature_corpus[0]" in e for e in errors))
+
+    def test_literature_corpus_rejects_non_dict_item(self):
+        passport = self._base_passport(literature_corpus=["not a dict"])
+        errors = pp.validate_passport(passport, strict=False)
+        self.assertTrue(any("literature_corpus[0]" in e for e in errors))
+
+    def test_collaboration_depth_history_accepts_list(self):
+        passport = self._base_passport(collaboration_depth_history=[{"score": 80}])
+        self.assertEqual(pp.validate_passport(passport, strict=False), [])
+
+    def test_repro_lock_with_stochasticity_declaration_valid(self):
+        passport = self._base_passport(
+            repro_lock={"stochasticity_declaration": "fully deterministic"}
+        )
+        self.assertEqual(pp.validate_passport(passport, strict=False), [])
+
+    def test_repro_lock_stochasticity_declaration_must_be_string(self):
+        passport = self._base_passport(repro_lock={"stochasticity_declaration": 123})
+        errors = pp.validate_passport(passport, strict=False)
+        self.assertTrue(any("stochasticity_declaration" in e for e in errors))
+
+
 if __name__ == "__main__":
     unittest.main()

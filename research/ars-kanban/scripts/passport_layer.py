@@ -21,6 +21,21 @@ SCHEMA9_REQUIRED = {
     "version_label": str,
 }
 
+# Schema 9 v2 optional fields with expected types
+SCHEMA9_OPTIONAL = {
+    "claim_verification_report": dict,
+    "trust_chain_frontmatter": dict,
+    "literature_corpus": list,
+    "reset_boundary": list,
+    "collaboration_depth_history": list,
+    "repro_lock": (dict, type(None)),
+    "upstream_dependencies": list,
+    "content_hash": (str, type(None)),
+    "integrity_pass_date": (str, type(None)),
+    "topic": str,
+    "phase": (int, str),
+}
+
 # Valid verification statuses
 VALID_STATUSES = {"VERIFIED", "UNVERIFIED", "STALE"}
 
@@ -68,10 +83,36 @@ def validate_passport(passport: Dict[str, Any], strict: bool = True) -> List[str
             f"verification_status must be one of {sorted(VALID_STATUSES)}, got {vs!r}"
         )
 
-    # repro_lock must be None if present (opt-out)
-    if "repro_lock" in passport and passport["repro_lock"] is not None:
-        if not isinstance(passport["repro_lock"], dict):
-            errors.append("repro_lock must be a dict or null")
+    # Schema 9 v2 optional field type checks
+    for field, expected_types in SCHEMA9_OPTIONAL.items():
+        if field in passport:
+            # Normalize to tuple for uniform iteration
+            types_tuple = expected_types if isinstance(expected_types, tuple) else (expected_types,)
+            if not isinstance(passport[field], types_tuple):
+                type_names = ", ".join(t.__name__ for t in types_tuple)
+                errors.append(
+                    f"Field {field!r} must be one of [{type_names}], "
+                    f"got {type(passport[field]).__name__}"
+                )
+
+    # repro_lock stochasticity_declaration validation
+    repro_lock = passport.get("repro_lock")
+    if isinstance(repro_lock, dict):
+        if "stochasticity_declaration" in repro_lock:
+            if not isinstance(repro_lock["stochasticity_declaration"], str):
+                errors.append("repro_lock.stochasticity_declaration must be a string")
+        # additional repro_lock keys can be validated here as the spec evolves
+
+    # literature_corpus minimal shape validation
+    literature_corpus = passport.get("literature_corpus")
+    if isinstance(literature_corpus, list):
+        for i, item in enumerate(literature_corpus):
+            if not isinstance(item, dict):
+                errors.append(f"literature_corpus[{i}] must be a dict")
+            elif "title" not in item and "doi" not in item:
+                errors.append(
+                    f"literature_corpus[{i}] must contain at least 'title' or 'doi'"
+                )
 
     if strict and errors:
         raise PassportValidationError("; ".join(errors))
