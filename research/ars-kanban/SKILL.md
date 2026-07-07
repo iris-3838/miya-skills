@@ -1,31 +1,87 @@
 ---
 name: ars-kanban
-description: ARS (Academic Research System) phase workers that run via Hermes Kanban. Implements Phase 1-6 pipeline with Socratic dialogue mode, C mode deep-research acquisition loop, and Wording-Pattern Advisory.
-version: 0.3.0
+description: ARS (Academic Research System) phase workers that run via Hermes Kanban. Implements a 10-stage pipeline (1, 2, 2.5, 3, 3', 4, 4.5, 5, 5.5, 6) with mandatory integrity gates, two-stage review, Socratic dialogue, C mode deep-research acquisition loop, and Wording-Pattern Advisory.
+version: 0.4.0
 metadata:
   hermes:
-    tags: [academic, research, kanban, phase-worker, socratic, zotero]
+    tags: [academic, research, kanban, phase-worker, socratic, zotero, integrity-gate, traceability]
     category: academic
 ---
 
 # ARS Kanban — Hermes Port of Claude Code ARS
 
-Implements the ARS (Academic Research System) 6-phase pipeline as Hermes
-Kanban tasks. Ported from the Claude Code ARS deep-research skill
-(see `references/hermes-porting-glossary.md` in `deep-research`).
+Implements the ARS (Academic Research System) pipeline as Hermes Kanban tasks.
+The standard pipeline is now **10 stages**: 1 (Scoping), 2 (Investigation),
+2.5 (Integrity), 3 (Analysis), 3' (Re-Review), 4 (Composition), 4.5 (Final
+Integrity), 5 (Review), 5.5 (Process Summary), 6 (Revision). C mode expands
+Stage 2 into `2-1` (Literature Acquisition) and `2-2` (Zotero Corpus
+Investigation), inserting the integrity gate at `2.5` after `2-2`.
+
+Ported from the Claude Code ARS deep-research skill (see
+`references/hermes-porting-glossary.md` in `deep-research`). Current upstream
+target: **ARS v3.15.0**.
 
 ## What's Here
 
 | File | Role |
 |------|------|
-| `scripts/phase_worker.py` | Single-phase dispatcher (phase 1-6, plus C mode `2-1`/`2-2`). Reads body JSON, calls mentor, writes `phase_result.json`, upgrades passport, syncs KB. |
-| `scripts/init_board.py` | Bootstrap: spawn ARS phase tasks onto a Kanban board. Supports `--mode socratic` and `--mode c`. |
-| `scripts/c_literature_acquisition.py` | C mode Phase 2-1 engine: OpenAlex search, CrossRef abstract fallback, Zotero collection creation/item mapping. Does not bypass paywalls. |
-| `scripts/passport_layer.py` | Material-passport validation/upgrade (Phase 5 enforcement). |
+| `scripts/phase_worker.py` | Single-stage dispatcher (phases 1-6, 2.5, 3', 4.5, 5.5, plus C mode `2-1`/`2-2`). Reads body JSON, calls mentor, runs integrity gates for 2.5/4.5, writes `phase_result.json`, upgrades passport, syncs KB. |
+| `scripts/init_board.py` | Bootstrap: spawn ARS stage tasks onto a Kanban board. Supports `--mode socratic` and `--mode c`. |
+| `scripts/integrity_check.py` | 7-mode AI failure checklist for mandatory integrity gates (Stage 2.5 + 4.5). M1-M7, Lu 2026. |
+| `scripts/traceability_matrix.py` | Schema 11 R&R Traceability Matrix for Stage 3' re-review. Tracks author claims vs reviewer comments. |
+| `scripts/c_literature_acquisition.py` | C mode Stage 2-1 engine: OpenAlex search, CrossRef abstract fallback, Zotero collection creation/item mapping. Does not bypass paywalls. |
+| `scripts/passport_layer.py` | Material-passport validation/upgrade (Schema 9 v2). Supports claim verification report, trust-chain frontmatter, literature corpus, reset boundary, collaboration depth history. |
 | `scripts/kb_sync.py` | Persist phase result into the llm-kb wiki (best-effort). |
-| `scripts/socratic_phase.py` | Socratic dialogue mode for Phase 1. Block/unblock pattern for multi-turn user interaction. Persists state to `socratic_state.json`. |
+| `scripts/socratic_phase.py` | Socratic dialogue mode for Stage 1. Block/unblock pattern for multi-turn user interaction. Persists state to `socratic_state.json`. |
 | `scripts/wording_patterns.py` | Wording-Pattern Advisory (Kong #257). Detects AI-typical research-question shells; suppressed by domain-native vocabulary. |
-| `tests/` | 125 unittest cases across 8 test modules. |
+| `tests/` | unittest cases across 9 test modules. |
+
+## 10-Stage Pipeline
+
+The default full pipeline creates ten Kanban tasks:
+
+```text
+Stage 1:  Scoping
+Stage 2:  Investigation
+Stage 2.5: Integrity Gate (mandatory, non-skippable)
+Stage 3:  Analysis
+Stage 3':  Re-Review
+Stage 4:  Composition
+Stage 4.5: Final Integrity Gate (mandatory, zero-tolerance)
+Stage 5:  Review
+Stage 5.5: Process Summary
+Stage 6:  Revision
+```
+
+### Mandatory Integrity Gates
+
+- **Stage 2.5** (`integrity_check.py`, mode=`pre_review`): runs after Stage 2
+  (or after C mode `2-2`). Samples 30% of claims (min 10) and checks the 7
+  canonical AI failure modes from Lu 2026 (M1-M7). Fails → block for fixes,
+  max 3 rounds.
+- **Stage 4.5** (`integrity_check.py`, mode=`final_check`): runs after Stage 4
+  revision. Verifies **100%** of claims with zero-tolerance; any `SUSPECTED`
+  mode must be cleared or user-overridden before the pipeline advances.
+
+Both gates post a Kanban comment with `integrity_gate_report` metadata and call
+`kanban.block()` when failing.
+
+### Two-Stage Review
+
+- **Stage 3** (`academic-paper-reviewer`): first-round review package (EIC +
+  R1/R2/R3 + Devil's Advocate) produces an editorial decision and revision
+  roadmap.
+- **Stage 3'** (`traceability_matrix.py`): re-review after Stage 4 revision.
+  Builds a Schema 11 traceability matrix pairing each reviewer comment with the
+  author's claim, verification status, and residual issue. Emits a new decision
+  (Accept / Minor / Major). The hard revision-loop cap is **max 2 total loops**
+  across Stage 4 + Stage 4'.
+
+### Process Summary
+
+**Stage 5.5** emits a process record and AI self-reflection report after the
+final review. It runs after Stage 5 and before Stage 6 (final formatting-level
+revision if needed).
 
 ## Phase 1 Modes
 
@@ -72,10 +128,14 @@ hierarchical deep-research loop:
 Phase 1: Scoping
 Phase 2: Investigation (Deep Research)
   ├─ Phase 2-1: Literature Acquisition
-  └─ Phase 2-2: Investigation (Zotero Corpus)
+  ├─ Phase 2-2: Investigation (Zotero Corpus)
+  └─ Phase 2.5: Integrity Gate (mandatory)
 Phase 3: Analysis
+Phase 3': Re-Review
 Phase 4: Composition
+Phase 4.5: Final Integrity Gate (mandatory)
 Phase 5: Review
+Phase 5.5: Process Summary
 Phase 6: Revision
 ```
 
@@ -231,18 +291,22 @@ Semantic Scholar keyがあれば引用ネットワーク補完にも使ってく
 私がProQuest等でPDFをZoteroに追加したらunblockするので、2-2でZotero corpusを分析してください。
 ```
 
-## Phase Routing
+## Stage Routing
 
-| Phase | Name | Default Agents |
-|-------|------|----------------|
-| 1 | Scoping | research_question, research_architect, devils_advocate |
-| 2 | Investigation | bibliography, source_verification |
-| 2-1 | Literature Acquisition | bibliography, source_verification |
-| 2-2 | Investigation (Zotero Corpus) | bibliography, source_verification, synthesis |
-| 3 | Analysis | synthesis, devils_advocate |
-| 4 | Composition | report_compiler |
-| 5 | Review | editor_in_chief, ethics_review, devils_advocate |
-| 6 | Revision | report_compiler |
+| Stage | Name | Default Agents | Notes |
+|-------|------|----------------|-------|
+| 1 | Scoping | research_question, research_architect, devils_advocate | Socratic/full mode |
+| 2 | Investigation | bibliography, source_verification | |
+| 2-1 | Literature Acquisition | bibliography, source_verification | C mode only |
+| 2-2 | Investigation (Zotero Corpus) | bibliography, source_verification, synthesis | C mode only |
+| 2.5 | Integrity | integrity_verification_agent, state_tracker_agent | Mandatory gate |
+| 3 | Analysis | synthesis, devils_advocate | |
+| 3' | Re-Review | field_analyst_agent, eic_agent, editorial_synthesizer_agent | Traceability matrix |
+| 4 | Composition | report_compiler | |
+| 4.5 | Final Integrity | integrity_verification_agent, state_tracker_agent | Mandatory gate |
+| 5 | Review | editor_in_chief, ethics_review, devils_advocate | |
+| 5.5 | Process Summary | state_tracker_agent, pipeline_orchestrator_agent | |
+| 6 | Revision | report_compiler | Terminal revision |
 
 ## Running
 
@@ -276,13 +340,15 @@ When expanding a Phase 2-1 corpus beyond direct search results (e.g., seed paper
 
 ```bash
 cd tests && python -m unittest discover -v
-# 125 tests, all green
+# 160 tests, all green
 ```
 
 ## Differences from Upstream Claude Code ARS
 
 | Aspect | Claude Code ARS | Hermes Kanban ARS |
 |--------|------------------|-------------------|
+| Pipeline stages | 10 stages with 2 mandatory integrity gates | 10 stages with 2 mandatory integrity gates |
+| Two-stage review | Stage 3 + Stage 3' (Schema 11) | Stage 3 + Stage 3' (`traceability_matrix.py`) |
 | Cross-session Socratic | No (single session) | Yes (state.json + block/unblock) |
 | Delegation | PreToolUse hook | `delegate_task` from phase_worker |
 | Layer enforcement | Tool hook | Per-turn state validation |
@@ -296,4 +362,4 @@ for the full porting analysis.
 
 ## Versioning
 
-This port targets upstream ARS v3.11.0 (sync commit `0024947`).
+This port targets upstream ARS **v3.15.0**.
