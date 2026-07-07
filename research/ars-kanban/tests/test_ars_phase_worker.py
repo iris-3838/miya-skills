@@ -8,6 +8,8 @@ import types
 import unittest
 from unittest.mock import patch
 from pathlib import Path
+from pathlib import Path
+from typing import Union
 
 MODULE_PATH = Path("/opt/data/scripts/ars-kanban/phase_worker.py")
 
@@ -649,6 +651,77 @@ Workspace: dir @ /tmp/second
         self.assertEqual(result["status"], "completed")
         self.assertEqual(result["metadata"]["mode"], "full",
                          "mode should default to 'full' when missing from body")
+
+
+class TestIntegrityGate(unittest.TestCase):
+    """Stage 2.5 / 4.5 integrity gate wiring."""
+
+    def _build_context(self, phase: Union[int, str], artifacts: dict | None = None) -> str:
+        body = {
+            "phase": phase,
+            "mode": "full",
+            "topic": "test",
+            "material_passport": dict(VALID_PASSPORT),
+        }
+        return f"# Kanban task\n\n## Body\n{json.dumps(body)}\n"
+
+    def test_stage_2_5_runs_integrity_gate_and_passes(self):
+        worker = load_module()
+        context = self._build_context("2.5", artifacts={"claims": [{"text": "claim"}]})
+        kanban = FakeKanban(context)
+        delegator = FakeDelegator(result={"summary": "integrity result", "artifacts": {"claims": [{"text": "claim"}]}})
+
+        result = worker.run_phase_task("t_25", kanban=kanban, delegator=delegator)
+
+        self.assertEqual(result["status"], "completed")
+        _, _, metadata = kanban.completed[0]
+        self.assertIn("integrity_gate_report", metadata)
+        self.assertTrue(metadata["integrity_gate_report"]["passed"])
+        # Integrity gate comment posted
+        self.assertTrue(any("Integrity Gate" in c for _, c in kanban.comments))
+
+    def test_stage_4_5_runs_final_integrity_gate(self):
+        worker = load_module()
+        context = self._build_context("4.5", artifacts={"claims": [{"text": "c1"}, {"text": "c2"}]})
+        kanban = FakeKanban(context)
+        delegator = FakeDelegator(result={"summary": "final integrity", "artifacts": {"claims": [{"text": "c1"}, {"text": "c2"}]}})
+
+        result = worker.run_phase_task("t_45", kanban=kanban, delegator=delegator)
+
+        self.assertEqual(result["status"], "completed")
+        _, _, metadata = kanban.completed[0]
+        report = metadata["integrity_gate_report"]
+        self.assertEqual(report["mode"], "final_check")
+        self.assertEqual(report["claim_total"], 2)
+        self.assertEqual(report["claim_sample_count"], 2)
+
+    def test_integrity_gate_blocks_on_suspected_modes(self):
+        worker = load_module()
+        artifacts = {
+            "claims": [{"text": "claim"}],
+            "integrity_gate_overrides": {"M2": "SUSPECTED"},
+        }
+        context = self._build_context("2.5", artifacts=artifacts)
+        kanban = FakeKanban(context)
+        delegator = FakeDelegator(result={"summary": "integrity result", "artifacts": artifacts})
+
+        result = worker.run_phase_task("t_25_block", kanban=kanban, delegator=delegator)
+
+        self.assertEqual(result["status"], "blocked")
+        self.assertEqual(result["reason"], "integrity_gate_failed")
+        self.assertTrue(len(kanban.blocked) > 0)
+
+    def test_non_gate_phases_skip_integrity_check(self):
+        worker = load_module()
+        context = self._build_context(3)
+        kanban = FakeKanban(context)
+        delegator = FakeDelegator()
+
+        result = worker.run_phase_task("t_3", kanban=kanban, delegator=delegator)
+
+        self.assertEqual(result["status"], "completed")
+        _, _, metadata = kanban.completed[0]
+        self.assertNotIn("integrity_gate_report", metadata)
 
 
 if __name__ == "__main__":

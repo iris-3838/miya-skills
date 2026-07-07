@@ -244,6 +244,22 @@ def build_phase_context(task_id: str, phase: PhaseKey, mode: str, spec: Dict[str
     return base_context
 
 
+def should_block_for_integrity(phase: PhaseKey, report: Dict[str, Any]) -> bool:
+    """Stage 2.5/4.5 gate: block if report fails and rounds remain."""
+    if phase not in ("2.5", "4.5"):
+        return False
+    if report.get("passed"):
+        return False
+    if report.get("round_num", 1) >= report.get("max_rounds", 3):
+        return True  # exhausted — hard block
+    return True  # block for fix + re-verify
+
+
+def enforce_revision_loop_cap(loop_count: int) -> bool:
+    """Max 2 revision loops total (Stage 4 + Stage 4')."""
+    return loop_count < 2
+
+
 class KanbanCli:
     def __init__(self, board: Optional[str] = None, hermes: str = HERMES):
         self.board = board
@@ -476,6 +492,37 @@ def run_phase_task(task_id: str, *, kanban: Any, delegator: Any) -> Dict[str, An
             kanban.comment(task_id, f"KB sync skipped: KB directory not available for topic {topic!r}")
     except Exception as exc:
         kanban.comment(task_id, f"KB sync failed for task {task_id}: {exc}")
+
+    # Stage 2.5 / 4.5 integrity gate: run 7-mode AI failure checklist
+    gate_report: Optional[Dict[str, Any]] = None
+    if phase in ("2.5", "4.5"):
+        try:
+            from integrity_check import run_integrity_check  # type: ignore[import-untyped]
+
+            claims = artifacts.get("claims", []) if isinstance(artifacts, dict) else []
+            overrides = artifacts.get("integrity_gate_overrides") if isinstance(artifacts, dict) else None
+            gate_report = run_integrity_check(
+                mode="pre_review" if phase == "2.5" else "final_check",
+                claims=claims,
+                passport=passport,
+                overrides=overrides,
+            ).to_dict()
+            metadata["integrity_gate_report"] = gate_report
+            kanban.comment(
+                task_id,
+                f"## Integrity Gate ({phase}): {gate_report['passed'] and 'PASS' or 'FAIL'}\n"
+                f"- Sampled claims: {gate_report['claim_sample_count']}/{gate_report['claim_total']}\n"
+                f"- Suspected modes: {', '.join(gate_report['suspected_modes']) or 'none'}",
+            )
+            if should_block_for_integrity(phase, gate_report):
+                kanban.block(
+                    task_id,
+                    f"Integrity gate {phase} failed with suspected modes: {gate_report['suspected_modes']}. "
+                    "Fix the underlying issues and re-run this task, or acknowledge to override."
+                )
+                return {"status": "blocked", "phase": phase, "reason": "integrity_gate_failed", "metadata": metadata}
+        except Exception as exc:
+            kanban.comment(task_id, f"Integrity gate failed to run for task {task_id}: {exc}")
 
     kanban.complete(task_id, summary, metadata)
     return {"status": "completed", "phase": phase, "summary": summary, "metadata": metadata}
