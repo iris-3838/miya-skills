@@ -104,6 +104,32 @@ PHASE_SPECS: Dict[PhaseKey, Dict[str, Any]] = {
         "agents": ["report_compiler_agent"],
         "skills": ["deep-research", "academic-paper"],
     },
+    "2.5": {
+        "name": "Integrity",
+        "parent_phase": 2,
+        "agents": ["integrity_verification_agent", "state_tracker_agent"],
+        "skills": ["academic-pipeline"],
+        "gate": True,
+    },
+    "3'": {
+        "name": "Re-Review",
+        "parent_phase": 3,
+        "agents": ["field_analyst_agent", "eic_agent", "editorial_synthesizer_agent"],
+        "skills": ["academic-paper-reviewer"],
+    },
+    "4.5": {
+        "name": "Final Integrity",
+        "parent_phase": 4,
+        "agents": ["integrity_verification_agent", "state_tracker_agent"],
+        "skills": ["academic-pipeline"],
+        "gate": True,
+    },
+    "5.5": {
+        "name": "Process Summary",
+        "parent_phase": 5,
+        "agents": ["state_tracker_agent", "pipeline_orchestrator_agent"],
+        "skills": ["academic-pipeline"],
+    },
 }
 
 

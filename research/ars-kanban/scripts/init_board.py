@@ -61,6 +61,32 @@ PHASE_SPECS: Dict[PhaseKey, Dict[str, Any]] = {
         "name": "Revision",
         "agents": ["report_compiler_agent"],
     },
+    "2.5": {
+        "name": "Integrity",
+        "parent_phase": 2,
+        "agents": ["integrity_verification_agent", "state_tracker_agent"],
+        "skills": ["academic-pipeline"],
+        "gate": True,
+    },
+    "3'": {
+        "name": "Re-Review",
+        "parent_phase": 3,
+        "agents": ["field_analyst_agent", "eic_agent", "editorial_synthesizer_agent"],
+        "skills": ["academic-paper-reviewer"],
+    },
+    "4.5": {
+        "name": "Final Integrity",
+        "parent_phase": 4,
+        "agents": ["integrity_verification_agent", "state_tracker_agent"],
+        "skills": ["academic-pipeline"],
+        "gate": True,
+    },
+    "5.5": {
+        "name": "Process Summary",
+        "parent_phase": 5,
+        "agents": ["state_tracker_agent", "pipeline_orchestrator_agent"],
+        "skills": ["academic-pipeline"],
+    },
 }
 
 C_MODE_LITERATURE_SOURCES = [
@@ -102,8 +128,8 @@ C_MODE_LITERATURE_SOURCES = [
 def phase_sequence_for_mode(mode: str) -> list[PhaseKey]:
     """Return the task phase sequence for an ARS mode."""
     if mode == "c":
-        return [1, "2-1", "2-2", 3, 4, 5, 6]
-    return [1, 2, 3, 4, 5, 6]
+        return [1, "2-1", "2-2", "2.5", 3, "3'", 4, "4.5", 5, "5.5", 6]
+    return [1, 2, "2.5", 3, "3'", 4, "4.5", 5, "5.5", 6]
 
 
 def utc_now_iso() -> str:

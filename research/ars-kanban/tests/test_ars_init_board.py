@@ -98,13 +98,17 @@ class TestArsInitBoard(unittest.TestCase):
             )
 
         self.assertEqual(result["board_slug"], "ars-bates-vs-hjrland")
-        self.assertEqual(len(fake.created), 6)
+        self.assertEqual(len(fake.created), 10)
         self.assertEqual([task["title"] for task in fake.created], [
             "Phase 1: Scoping — Bates vs Hjørland",
             "Phase 2: Investigation — Bates vs Hjørland",
+            "Phase 2.5: Integrity — Bates vs Hjørland",
             "Phase 3: Analysis — Bates vs Hjørland",
+            "Phase 3': Re-Review — Bates vs Hjørland",
             "Phase 4: Composition — Bates vs Hjørland",
+            "Phase 4.5: Final Integrity — Bates vs Hjørland",
             "Phase 5: Review — Bates vs Hjørland",
+            "Phase 5.5: Process Summary — Bates vs Hjørland",
             "Phase 6: Revision — Bates vs Hjørland",
         ])
         # Dependencies are attached at task creation time via parent_ids;
@@ -128,7 +132,7 @@ class TestArsInitBoard(unittest.TestCase):
             second = init_board.init_board("Bates vs Hjørland", kanban=fake, workspace_root=Path(tmp))
 
         self.assertEqual(first["task_ids"], second["task_ids"])
-        self.assertEqual(len(fake.created), 6)
+        self.assertEqual(len(fake.created), 10)
         self.assertEqual(len(fake.links), 0)
 
     def test_c_mode_expands_phase_2_into_literature_acquisition_and_zotero_investigation(self):
@@ -143,20 +147,31 @@ class TestArsInitBoard(unittest.TestCase):
                 origin_date="2026-06-05T00:00:00Z",
             )
 
-        self.assertEqual(len(fake.created), 7)
-        self.assertEqual(result["phase_sequence"], [1, "2-1", "2-2", 3, 4, 5, 6])
+        self.assertEqual(len(fake.created), 11)
+        self.assertEqual(result["phase_sequence"], [1, "2-1", "2-2", "2.5", 3, "3'", 4, "4.5", 5, "5.5", 6])
         self.assertEqual([task["title"] for task in fake.created], [
             "Phase 1: Scoping — Bates vs Hjørland",
             "Phase 2-1: Literature Acquisition — Bates vs Hjørland",
             "Phase 2-2: Investigation (Zotero Corpus) — Bates vs Hjørland",
+            "Phase 2.5: Integrity — Bates vs Hjørland",
             "Phase 3: Analysis — Bates vs Hjørland",
+            "Phase 3': Re-Review — Bates vs Hjørland",
             "Phase 4: Composition — Bates vs Hjørland",
+            "Phase 4.5: Final Integrity — Bates vs Hjørland",
             "Phase 5: Review — Bates vs Hjørland",
+            "Phase 5.5: Process Summary — Bates vs Hjørland",
             "Phase 6: Revision — Bates vs Hjørland",
         ])
         self.assertEqual(fake.created[1]["parent_ids"], [fake.created[0]["id"]])
         self.assertEqual(fake.created[2]["parent_ids"], [fake.created[1]["id"]])
         self.assertEqual(fake.created[3]["parent_ids"], [fake.created[2]["id"]])
+        self.assertEqual(fake.created[4]["parent_ids"], [fake.created[3]["id"]])
+        self.assertEqual(fake.created[5]["parent_ids"], [fake.created[4]["id"]])
+        self.assertEqual(fake.created[6]["parent_ids"], [fake.created[5]["id"]])
+        self.assertEqual(fake.created[7]["parent_ids"], [fake.created[6]["id"]])
+        self.assertEqual(fake.created[8]["parent_ids"], [fake.created[7]["id"]])
+        self.assertEqual(fake.created[9]["parent_ids"], [fake.created[8]["id"]])
+        self.assertEqual(fake.created[10]["parent_ids"], [fake.created[9]["id"]])
 
         phase21_body = json.loads(fake.created[1]["body"])
         self.assertEqual(phase21_body["phase"], "2-1")
@@ -169,8 +184,9 @@ class TestArsInitBoard(unittest.TestCase):
 
         phase22_body = json.loads(fake.created[2]["body"])
         self.assertEqual(phase22_body["material_passport"]["upstream_dependencies"], ["phase2-1-v0"])
-        phase3_body = json.loads(fake.created[3]["body"])
-        self.assertEqual(phase3_body["material_passport"]["upstream_dependencies"], ["phase2-2-v0"])
+        phase25_body = json.loads(fake.created[3]["body"])
+        self.assertEqual(phase25_body["phase"], "2.5")
+        self.assertEqual(phase25_body["material_passport"]["upstream_dependencies"], ["phase2-2-v0"])
 
         sources = phase21_body["c_mode"]["literature_sources"]
         self.assertEqual([s["id"] for s in sources], [
@@ -235,6 +251,35 @@ class TestArsInitBoard(unittest.TestCase):
 
         self.assertIn("--assignee", kanban.calls[0])
         self.assertIn("default", kanban.calls[0])
+
+    def test_ten_stage_specs_are_present(self):
+        init_board = load_module()
+
+        expected_gated = {"2.5", "4.5"}
+        expected_specs = {
+            "2.5": {"name": "Integrity", "parent_phase": 2, "gate": True},
+            "3'": {"name": "Re-Review", "parent_phase": 3},
+            "4.5": {"name": "Final Integrity", "parent_phase": 4, "gate": True},
+            "5.5": {"name": "Process Summary", "parent_phase": 5},
+        }
+        for phase_key, expected in expected_specs.items():
+            spec = init_board.PHASE_SPECS[phase_key]
+            self.assertEqual(spec["name"], expected["name"])
+            self.assertEqual(spec["parent_phase"], expected["parent_phase"])
+            self.assertEqual(spec.get("gate"), expected.get("gate"))
+            self.assertIsNotNone(spec.get("agents"))
+            self.assertIsNotNone(spec.get("skills"))
+            if phase_key in expected_gated:
+                self.assertTrue(spec["gate"])
+
+    def test_phase_sequence_includes_new_stages(self):
+        init_board = load_module()
+
+        c_seq = init_board.phase_sequence_for_mode("c")
+        self.assertEqual(c_seq, [1, "2-1", "2-2", "2.5", 3, "3'", 4, "4.5", 5, "5.5", 6])
+
+        default_seq = init_board.phase_sequence_for_mode("full")
+        self.assertEqual(default_seq, [1, 2, "2.5", 3, "3'", 4, "4.5", 5, "5.5", 6])
 
 
 if __name__ == "__main__":
