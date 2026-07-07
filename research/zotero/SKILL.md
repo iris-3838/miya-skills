@@ -641,22 +641,66 @@ while True:
 
 Use this when the user says e.g. 「このZotero論文を翻訳して」「ZoteroのPDFをbilingualにして」. It connects Zotero attachment download with the uv-managed pdf2zh-next environment at `/opt/data/workspace/pdf2zh-env`.
 
+Two scripts are available:
+
+- `scripts/zotero_pdf2zh.py` — legacy subprocess-based CLI wrapper. Conservative and stable.
+- `scripts/zotero_pdf2zh_api.py` — **prototype using PDFMathTranslate-next's native Python API**. Recommended for long LLM translations because it streams per-stage progress, captures the auto-extracted glossary CSV, and writes `translation.log` + `translation_result.json` for background monitoring and llm-kb ingestion.
+
 ### Environment
 
-The Zotero skill has its own uv environment:
+The pdf2zh-next environment now also contains `pyzotero` and `httpx`, so it can run the API prototype directly:
+
+```bash
+/opt/data/workspace/pdf2zh-env/.venv/bin/python
+```
+
+The legacy script still needs the Zotero skill's own uv environment:
 
 ```bash
 cd /opt/data/workspace/miya-skills/research/zotero
 uv sync --python 3.12
 ```
 
-The pdf2zh-next environment is separate:
+### Translate a Zotero item PDF (Python API prototype)
+
+Recommended. Run with the pdf2zh-env interpreter directly so pdf2zh-next is available natively and pyzotero/httpx are already installed.
 
 ```bash
-/opt/data/workspace/pdf2zh-env/.venv/bin/pdf2zh --version
+cd /opt/data/workspace/miya-skills/research/zotero
+/opt/data/workspace/pdf2zh-env/.venv/bin/python -u scripts/zotero_pdf2zh_api.py \
+  --item ITEMKEY --engine bing --lang-in en --lang-out ja
 ```
 
-### Translate a Zotero item PDF
+Search by title/author:
+
+```bash
+/opt/data/workspace/pdf2zh-env/.venv/bin/python -u scripts/zotero_pdf2zh_api.py \
+  --query "Bates information knowledge" --engine bing --lang-in en --lang-out ja
+```
+
+#### OpenAICompatible backend (Python API prototype)
+
+```bash
+cd /opt/data/workspace/miya-skills/research/zotero
+set -a && . /opt/data/.env && set +a
+/opt/data/workspace/pdf2zh-env/.venv/bin/python -u scripts/zotero_pdf2zh_api.py \
+  --item ITEMKEY \
+  --engine openaicompatible \
+  --openai-compatible-model "deepseek-v4-flash" \
+  --openai-compatible-base-url "https://opencode.ai/zen/go/v1" \
+  --openai-compatible-api-key-env OPENCODE_GO_API_KEY \
+  --lang-in en --lang-out ja
+```
+
+**Outputs (in `llm-kb.miya-lis.net/raw/papers/zotero_pdf2zh_api/{Title}__{KEY}/translated/`):**
+- `*.ja.mono.pdf`
+- `*.ja.dual.pdf` (default side-by-side)
+- `translation.log` — per-stage progress events
+- `translation_result.json` — paths, elapsed seconds, peak memory, glossary path (when available)
+
+### Legacy subprocess wrapper
+
+#### Translate a Zotero item PDF
 
 Prefer parent item keys when known:
 
