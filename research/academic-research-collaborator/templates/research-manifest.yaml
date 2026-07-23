@@ -1,0 +1,62 @@
+# ARC Research Manifest テンプレート — 正本
+# プロジェクト状態をセッション間で持続する。
+# research-projects/{project-id}/research-manifest.yaml に配置。
+
+manifest_version: "1.0"
+project_id: ""               # 例: bates-hjorland-comparison
+project_title: ""            # 例: BatesとHjørlandの情報概念比較
+project_path: ""             # 絶対パス
+artifact_dir: ""             # 成果物出力ディレクトリ（通常 project_path/artifacts）
+created: ""                  # YYYY-MM-DD
+updated: ""                  # YYYY-MM-DD
+revision: 0
+status: initialized          # initialized | active | paused | completed | abandoned
+
+events: []
+  # 主要イベントを時系列で記録。coreが生成する構造化event:
+  # - id: "<uuid>"
+  #   type: init | phase_transition | human_gate_pause | decision | note
+  #   phase: "initialized"
+  #   from_phase: ""       # phase_transition時
+  #   to_phase: ""         # phase_transition時
+  #   reason: ""           # human_gate_pause時
+  #   revision: 0
+  #   timestamp: "YYYY-MM-DDTHH:MM:SS+00:00"
+
+state:
+  mode: full                  # full | quick-scan | lit-review
+  current_phase: initialized  # initialized | design | plan | curate | acquisition_pending | reflection
+  completed_phases: []
+  resume_context:
+    blocking_reason: ""       # 中断理由（空なら通常進行）
+    last_artifact: ""         # 最後に生成した成果物パス
+
+  rq:
+    core: ""                  # 中核RQ
+    sub_questions: []
+    status: draft             # draft | confirmed
+
+  route_ledger:
+    completed: []
+      # 完了した探索経路の記録:
+      # - id: ""
+      #   result: ""           # ヒット数・新規採用数
+      #   verdict: ""          # continue | deplete | critical | expand | stop
+    planned_next: []
+      # 次に推奨する経路（reflectionで更新）:
+      # - id: ""
+      #   priority: 1
+
+  decisions_pending: []
+    # 人間の判断待ちタスク:
+    # - id: ""
+    #   type: ""              # candidate_selection | acquisition | direction
+    #   phase: ""
+    #   description: ""
+    #   artifact: ""
+
+  blocked_items: []
+    # 取得不能・未検証の文献:
+    # - id: ""
+    #   title: ""
+    #   reason: ""             # paywall | not_found | language | deferred

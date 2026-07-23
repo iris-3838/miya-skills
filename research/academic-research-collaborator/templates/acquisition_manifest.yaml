@@ -1,0 +1,18 @@
+# Acquisition Manifest — 正本
+# ARC-curateの出力。status と entries で取得状態を管理する。
+# 人間が本文入手状況を追記する。
+
+status: pending              # pending | resolved
+project_id: ""               # 紐づくresearch project ID
+
+entries: []
+  # - candidate_id: ""
+  #   doi: ""                 # DOI
+  #   title: ""               # タイトル
+  #   current_scope: ""       # metadata_only | abstract_only
+  #   target_scope: ""        # 取得目標: fulltext
+  #   acquisition_status: ""  # pending | not_attempted | in_progress | acquired | failed | unavailable | not_needed
+  #   access:
+  #     route: ""             # OA | DOI resolver | 機関リポジトリ | ILL | 著者プレプリント
+  #     note: ""              # アクセス試行の記録
+  #   zotero_key: null        # 人間がZotero登録後に記入
